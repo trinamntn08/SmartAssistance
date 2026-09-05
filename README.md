@@ -1,30 +1,49 @@
 # SmartAssistance
 
-SmartAssistance is a new AI-assisted product. The repository currently contains
-the project foundation; product scope and implementation technology are
-intentionally undecided until the first architecture decision is recorded.
+SmartAssistance is a privacy-first Chrome writing assistant that rephrases or
+translates the complete text in a focused email, comment, or message field.
 
-## Start here
+## Current status
 
-1. Complete [the project brief](docs/product/PROJECT_BRIEF.md) with the problem,
-   users, measurable outcomes, and initial scope.
-2. Record the runtime and delivery architecture with
-   [the ADR template](docs/decisions/0000-template.md).
-3. Add the first small vertical slice under `src/` and its tests under `tests/`.
-4. Replace the placeholder quality commands in
-   [the development guide](docs/development.md) when the toolchain is selected.
+The local MVP is implemented: a Chrome extension and stateless API support
+capture, rewrite, preview, copy, safe replacement, retry, cancellation, and undo.
+It is not ready for public release. Production login, shared per-user quotas,
+live model quality evaluation, and real-site manual verification remain open.
+
+See [implementation status](docs/status.md) for validation evidence and remaining
+work, and [the full architecture](docs/architecture/README.md) for components,
+interfaces, lifecycle, security boundaries, and deployment.
+
+## Local setup
+
+1. Install Node.js 24 LTS.
+2. Run `npm ci`.
+3. Copy `.env.example` to `.env` and add an OpenAI API key.
+4. Run `npm run dev:api` and `npm run dev:extension`.
+5. Load `apps/extension/dist` as an unpacked Chrome extension.
+
+See [the development guide](docs/development.md) for the complete workflow.
+
+For the complete validation gate, install the test browser once with
+`npx playwright install chromium`, then run `npm run check`. Browser tests use
+synthetic drafts and a local fake API; they do not call OpenAI.
+
+Read [privacy and retention](docs/privacy.md) before sending real drafts.
 
 ## Repository map
 
 ```text
 .
 |-- AGENTS.md                 Instructions for coding agents
+|-- apps/
+|   |-- api/                  Stateless rewrite API and OpenAI adapter
+|   `-- extension/            Chrome Manifest V3 extension
 |-- docs/
 |   |-- architecture/         System boundaries and diagrams
 |   |-- decisions/            Architecture decision records (ADRs)
 |   `-- product/              Product goals and scope
-|-- src/                      Product source code
-`-- tests/                    Automated tests
+`-- packages/
+    `-- contracts/            Shared request and response contracts
 ```
 
 ## Working agreements
@@ -32,8 +51,8 @@ intentionally undecided until the first architecture decision is recorded.
 - Keep secrets out of Git. Copy `.env.example` to `.env` for local values.
 - Prefer small, reviewable changes tied to an explicit outcome.
 - Record consequential and hard-to-reverse choices as ADRs.
-- Add automated tests with behavior changes once a test runner is selected.
-- Do not introduce a framework only to fill the empty repository.
+- Add automated tests with behavior changes.
+- Run `npm run check` before opening a pull request.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the contribution workflow and
 [SECURITY.md](SECURITY.md) for security reporting.

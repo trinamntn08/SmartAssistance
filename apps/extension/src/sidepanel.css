@@ -1,0 +1,164 @@
+:root {
+  color: #172033;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-synthesis: none;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+[hidden] {
+  /* biome-ignore lint/complexity/noImportantStyles: the HTML hidden state must override component display rules. */
+  display: none !important;
+}
+
+:focus-visible {
+  outline: 3px solid #3157d5;
+  outline-offset: 3px;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  background: #f5f7fb;
+}
+
+main {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+}
+
+header,
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+h1,
+.eyebrow {
+  margin: 0;
+}
+
+h1 {
+  font-size: 21px;
+}
+
+.eyebrow {
+  color: #526078;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+section,
+#result {
+  display: grid;
+  gap: 12px;
+}
+
+.options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.options label:last-child {
+  grid-column: 1 / -1;
+}
+
+label {
+  display: grid;
+  gap: 5px;
+  color: #34415a;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+textarea,
+select,
+button {
+  border: 1px solid #c7cede;
+  border-radius: 8px;
+  font: inherit;
+}
+
+textarea,
+select {
+  width: 100%;
+  background: white;
+  color: #172033;
+  padding: 9px;
+}
+
+textarea {
+  min-height: 105px;
+  resize: vertical;
+  line-height: 1.45;
+}
+
+#original {
+  background: #eef1f6;
+}
+
+button {
+  min-height: 38px;
+  cursor: pointer;
+  font-weight: 700;
+  padding: 8px 13px;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.primary {
+  border-color: #3157d5;
+  background: #3157d5;
+  color: white;
+}
+
+.secondary {
+  background: white;
+  color: #26344f;
+}
+
+.compact {
+  min-height: 32px;
+  padding: 5px 9px;
+}
+
+.status,
+.notice,
+footer {
+  margin: 0;
+  color: #526078;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.status {
+  border-left: 3px solid #3157d5;
+  background: white;
+  padding: 10px 12px;
+}
+
+.status.error {
+  border-left-color: #bd2c2c;
+  color: #842121;
+}
+
+.notice {
+  color: #745117;
+}
+
+footer {
+  border-top: 1px solid #dce1eb;
+  padding-top: 12px;
+}

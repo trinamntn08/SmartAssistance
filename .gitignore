@@ -27,6 +27,8 @@ htmlcov/
 .next/
 .nuxt/
 coverage/
+test-results/
+playwright-report/
 dist/
 build/
 out/
@@ -44,6 +46,7 @@ temp/
 .vscode/
 *.suo
 *.user
+*.tsbuildinfo
 .DS_Store
 Thumbs.db
 

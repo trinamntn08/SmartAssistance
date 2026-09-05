@@ -1,0 +1,38 @@
+{
+  "name": "smartassistance",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm test && npm run build && npm run test:browser",
+    "dev:api": "node --watch --env-file-if-exists=.env --import tsx apps/api/src/index.ts",
+    "dev:extension": "node apps/extension/scripts/build.mjs --watch",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
+    "lint": "biome lint .",
+    "test": "vitest run",
+    "test:browser": "playwright test",
+    "eval:rewrites": "node --env-file-if-exists=.env --import tsx apps/api/src/evaluations/run.ts",
+    "test:watch": "vitest",
+    "typecheck": "npm run typecheck --workspaces --if-present && tsc -p tsconfig.tests.json --noEmit"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.12",
+    "@playwright/test": "^1.63.0",
+    "@types/chrome": "^0.2.8",
+    "@types/node": "^24.13.3",
+    "esbuild": "^0.28.2",
+    "jsdom": "^30.0.1",
+    "tsx": "^4.23.13",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.0"
+  }
+}

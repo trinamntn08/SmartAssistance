@@ -2,14 +2,13 @@
 
 ## Mission and current state
 
-SmartAssistance is at project inception. The product brief is the source of truth
-for user needs and scope. Architecture decision records (ADRs) are the source of
-truth for consequential technical choices.
+SmartAssistance is a privacy-first Chrome writing assistant. The product brief is
+the source of truth for user needs and scope. Architecture decision records
+(ADRs) are the source of truth for consequential technical choices.
 
-No application language, framework, package manager, or deployment target has
-been selected. Do not introduce one merely to populate the repository. During
-the first implementation task, base that choice on the project brief and record
-it in an ADR.
+The repository uses Node.js 24, npm workspaces, TypeScript, Chrome Manifest V3,
+esbuild, Biome, and Vitest. The API is stateless and keeps OpenAI credentials out
+of the browser; see ADR-0001.
 
 These instructions apply to the entire repository. A more deeply nested
 `AGENTS.md` or `AGENTS.override.md` may add instructions for its directory.
@@ -38,6 +37,14 @@ These instructions apply to the entire repository. A more deeply nested
 - Record significant dependency, data, security, deployment, or architecture
   decisions in `docs/decisions/`.
 
+## Standard commands
+
+- Install: `npm ci`
+- Development API: `npm run dev:api`
+- Development extension build: `npm run dev:extension`
+- Format: `npm run format`
+- Complete validation: `npm run check`
+
 ## Quality and security
 
 - Add tests for changed behavior, important failure paths, and trust boundaries.
@@ -60,5 +67,15 @@ These instructions apply to the entire repository. A more deeply nested
 - Flag code that bypasses a documented boundary or contradicts an accepted ADR.
 - Flag secrets, sensitive-data logging, unbounded model/tool loops, missing
   external-call timeouts, and unsafe handling of model-generated actions.
-- Require tests for behavior changes unless the change is documentation-only or
-  the repository still has no executable toolchain.
+- Require tests for behavior changes unless the change is documentation-only.
+
+## Parallel implementation
+
+- Use subagents for independent implementation or review work when it materially
+  helps. Keep small or tightly coupled changes with one agent.
+- Before delegating, read [the parallel-agent workflow](docs/parallel-agents.md).
+  Assign exclusive file ownership, settle shared contracts first, and preserve
+  other sessions' work. Prefer separate worktrees for independent sessions.
+- Use the project roles in `.codex/agents/` when supported; otherwise pass their
+  instructions explicitly. Use at most three concurrent subagents and no nested
+  delegation. The coordinator owns integration and final validation.

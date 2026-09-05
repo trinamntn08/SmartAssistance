@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "SmartAssistance",
+  "description": "Rephrase or translate text in the editor you are using.",
+  "version": "0.1.0",
+  "minimum_chrome_version": "116",
+  "permissions": ["activeTab", "alarms", "contextMenus", "scripting", "sidePanel", "storage"],
+  "host_permissions": ["http://127.0.0.1:8787/*"],
+  "background": {
+    "service_worker": "service-worker.js"
+  },
+  "action": {
+    "default_title": "Rewrite focused text"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "commands": {
+    "rewrite-focused-text": {
+      "suggested_key": {
+        "default": "Alt+Shift+R",
+        "mac": "Alt+Shift+R"
+      },
+      "description": "Rewrite the focused editable field"
+    }
+  }
+}

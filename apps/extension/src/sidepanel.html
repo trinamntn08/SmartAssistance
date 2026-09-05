@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SmartAssistance</title>
+    <link rel="stylesheet" href="sidepanel.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <p class="eyebrow">Writing assistant</p>
+          <h1>SmartAssistance</h1>
+        </div>
+        <button id="recapture" class="secondary compact" type="button">Recapture</button>
+      </header>
+
+      <p id="status" class="status" role="status" aria-live="polite">
+        Focus an editor, then use the extension action.
+      </p>
+
+      <section id="privacy-notice" aria-labelledby="privacy-title">
+        <h2 id="privacy-title">Before you send a draft</h2>
+        <p>Generate sends only the captured field and your rewrite settings to the SmartAssistance API and OpenAI. Surrounding page content is not sent.</p>
+        <p>The app does not save draft history. Captured text is temporary and expires after ten minutes. It is cleared when you recapture, navigate, close the source tab, or choose Clear text and consent.</p>
+        <p>OpenAI retention depends on the provider account and model settings. Disabling response storage does not guarantee zero provider retention.</p>
+        <a href="https://developers.openai.com/api/docs/guides/your-data" target="_blank" rel="noreferrer">OpenAI data controls</a>
+        <button id="accept-privacy" class="primary" type="button">I agree to send drafts when I choose Generate</button>
+      </section>
+
+      <section id="workspace" hidden>
+        <label for="original">Original</label>
+        <textarea id="original" dir="auto" readonly></textarea>
+        <p id="rich-text-warning" class="notice" hidden>
+          Replacing this rich-text field will use plain text.
+        </p>
+
+        <div class="options">
+          <label>
+            Action
+            <select id="operation">
+              <option value="rephrase">Rephrase</option>
+              <option value="grammar">Fix grammar</option>
+              <option value="concise">Make concise</option>
+              <option value="translate">Translate</option>
+            </select>
+          </label>
+          <label>
+            Tone
+            <select id="tone">
+              <option value="natural">Natural</option>
+              <option value="formal">Formal</option>
+              <option value="casual">Casual</option>
+            </select>
+          </label>
+          <label>
+            Output language
+            <select id="language">
+              <option value="same">Same as input</option>
+              <option value="en">English</option>
+              <option value="fr">French</option>
+              <option value="es">Spanish</option>
+              <option value="de">German</option>
+              <option value="it">Italian</option>
+              <option value="pt">Portuguese</option>
+              <option value="ja">Japanese</option>
+              <option value="ko">Korean</option>
+              <option value="zh-CN">Chinese (Simplified)</option>
+            </select>
+          </label>
+        </div>
+
+        <button id="generate" class="primary" type="button" disabled>Generate preview</button>
+        <button id="cancel" class="secondary" type="button" hidden>Cancel rewrite</button>
+
+        <div id="result" hidden>
+          <label for="preview">Preview</label>
+          <textarea id="preview" dir="auto"></textarea>
+          <div class="actions">
+            <button id="replace" class="primary" type="button">Replace field</button>
+            <button id="copy" class="secondary" type="button">Copy</button>
+          </div>
+        </div>
+        <button id="undo" class="secondary" type="button" hidden disabled>
+          Undo last replacement
+        </button>
+      </section>
+
+      <footer>
+        Your draft is sent only when you choose Generate. There is no saved draft history.
+        <button id="clear-private-data" class="secondary" type="button">Clear text and consent</button>
+      </footer>
+    </main>
+    <script src="sidepanel.js"></script>
+  </body>
+</html>
