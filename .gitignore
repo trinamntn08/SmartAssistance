@@ -1,0 +1,51 @@
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+*.local
+*.pem
+*.key
+
+# Dependency directories
+node_modules/
+vendor/
+.venv/
+venv/
+
+# Python caches and artifacts
+__pycache__/
+*.py[cod]
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.tox/
+.coverage
+htmlcov/
+
+# JavaScript and general build artifacts
+.cache/
+.next/
+.nuxt/
+coverage/
+dist/
+build/
+out/
+
+# Logs, temporary files, and local databases
+*.log
+*.pid
+*.sqlite
+*.sqlite3
+tmp/
+temp/
+
+# IDE and operating-system files
+.idea/
+.vscode/
+*.suo
+*.user
+.DS_Store
+Thumbs.db
+
+# Codex local session output
+.codex-log/
