@@ -22,6 +22,8 @@ No custom domain is required: Render provides an HTTPS service URL.
 Create a private GitHub repository and push this checkout. Confirm that `.env`,
 `dist`, and any API keys are absent from the repository. Render reads the
 committed [`render.yaml`](../render.yaml) blueprint from the repository root.
+Its build command explicitly installs the development-only bundler before
+building the API, even though the running service uses `NODE_ENV=production`.
 
 ## 2. Create the Render API service
 

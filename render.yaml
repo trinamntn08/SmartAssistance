@@ -3,7 +3,7 @@ services:
     name: smartassistance-api
     runtime: node
     plan: free
-    buildCommand: npm ci && npm run build
+    buildCommand: npm ci --include=dev && npm run build --workspace @smartassistance/api
     startCommand: npm run start --workspace @smartassistance/api
     healthCheckPath: /healthz
     envVars:
