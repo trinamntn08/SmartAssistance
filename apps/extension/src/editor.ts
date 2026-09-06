@@ -12,6 +12,7 @@ interface EditorSnapshot {
   appliedMarkup?: string;
   snapshotId: string;
   expiresAt: number;
+  nativeEditing: boolean;
 }
 const SUPPORTED_INPUT_TYPES = new Set(["email", "search", "tel", "text", "url"]);
 let activeSnapshot: EditorSnapshot | undefined;
@@ -87,6 +88,48 @@ function readEditorText(element: SupportedEditor): string {
 function markup(element: SupportedEditor): string | undefined {
   return isInput(element) ? undefined : element.innerHTML;
 }
+function usesManagedEditor(element: SupportedEditor): boolean {
+  return (
+    !isInput(element) &&
+    (element.hasAttribute("data-lexical-editor") ||
+      element.querySelector('[data-contents="true"]') !== null)
+  );
+}
+async function insertNativeText(snapshot: EditorSnapshot, text: string): Promise<boolean> {
+  const { element, document: documentValue } = snapshot;
+  const expectedText = readEditorText(element);
+  const expectedMarkup = markup(element);
+  if (typeof documentValue.execCommand !== "function") return false;
+  element.focus();
+  // Focus handlers can change or replace the captured editor.
+  if (
+    isUnavailable(element) ||
+    documentValue.activeElement !== element ||
+    readEditorText(element) !== expectedText ||
+    markup(element) !== expectedMarkup
+  )
+    return false;
+  const selection = documentValue.getSelection();
+  if (!selection) return false;
+  const range = documentValue.createRange();
+  range.selectNodeContents(element);
+  selection.removeAllRanges();
+  selection.addRange(range);
+  // Plain text only. Let the browser emit editing events for the page's state model.
+  try {
+    documentValue.execCommand("insertText", false, text);
+  } catch {
+    return false;
+  }
+  // Allow synchronous listeners and queued reconciliation to finish before checking.
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  return (
+    activeSnapshot === snapshot &&
+    !isUnavailable(element) &&
+    snapshot.expiresAt > Date.now() &&
+    readEditorText(element) === text
+  );
+}
 function dispatchEditorEvents(element: HTMLElement): void {
   element.dispatchEvent(new Event("input", { bubbles: true }));
   element.dispatchEvent(new Event("change", { bubbles: true }));
@@ -155,12 +198,16 @@ export function captureFocusedEditor(documentValue: Document = document): Conten
     originalText: text,
     snapshotId: draft.snapshotId,
     expiresAt: draft.expiresAt,
+    nativeEditing: usesManagedEditor(element),
     ...(originalMarkup === undefined ? {} : { originalMarkup }),
   };
   expiryTimer = setTimeout(clearEditorSnapshot, SNAPSHOT_TTL_MS);
   return { ok: true, draft };
 }
-export function applyRewrite(snapshotId: string, text: string): ContentScriptResponse {
+export async function applyRewrite(
+  snapshotId: string,
+  text: string,
+): Promise<ContentScriptResponse> {
   const snapshot = currentSnapshot(snapshotId);
   if (!snapshot)
     return conflict("The captured editor expired or is unavailable. Copy the preview instead.");
@@ -175,21 +222,30 @@ export function applyRewrite(snapshotId: string, text: string): ContentScriptRes
       "The editor changed after capture. It was not overwritten. Copy the preview instead.",
     );
   }
-  if (!isInput(snapshot.element)) {
-    const serializer = new XMLSerializer();
-    snapshot.originalNodes = [...snapshot.element.childNodes].map((node) => ({
-      node,
-      signature: serializer.serializeToString(node),
-    }));
+  if (snapshot.nativeEditing) {
+    if (!(await insertNativeText(snapshot, text))) {
+      clearEditorSnapshot(snapshotId);
+      return conflict(
+        "This editor did not accept the replacement. Check the field and copy the preview instead.",
+      );
+    }
+  } else {
+    if (!isInput(snapshot.element)) {
+      const serializer = new XMLSerializer();
+      snapshot.originalNodes = [...snapshot.element.childNodes].map((node) => ({
+        node,
+        signature: serializer.serializeToString(node),
+      }));
+    }
+    writeEditorText(snapshot.element, text);
   }
-  writeEditorText(snapshot.element, text);
   snapshot.appliedText = readEditorText(snapshot.element);
   const appliedMarkup = markup(snapshot.element);
   if (appliedMarkup !== undefined) snapshot.appliedMarkup = appliedMarkup;
-  dispatchEditorEvents(snapshot.element);
+  if (!snapshot.nativeEditing) dispatchEditorEvents(snapshot.element);
   return { ok: true, applied: true };
 }
-export function undoRewrite(snapshotId: string): ContentScriptResponse {
+export async function undoRewrite(snapshotId: string): Promise<ContentScriptResponse> {
   const snapshot = currentSnapshot(snapshotId);
   if (
     !snapshot ||
@@ -199,7 +255,13 @@ export function undoRewrite(snapshotId: string): ContentScriptResponse {
   ) {
     return conflict("Undo is unavailable because the editor changed or the snapshot expired.");
   }
-  if (snapshot.originalNodes) {
+  if (snapshot.nativeEditing) {
+    if (!(await insertNativeText(snapshot, snapshot.originalText))) {
+      clearEditorSnapshot(snapshotId);
+      return conflict("This editor did not accept undo. Check the field before continuing.");
+    }
+    snapshot.originalMarkup = snapshot.element.innerHTML;
+  } else if (snapshot.originalNodes) {
     const serializer = new XMLSerializer();
     if (
       snapshot.originalNodes.some(
@@ -217,6 +279,6 @@ export function undoRewrite(snapshotId: string): ContentScriptResponse {
   delete snapshot.appliedText;
   delete snapshot.appliedMarkup;
   delete snapshot.originalNodes;
-  dispatchEditorEvents(snapshot.element);
+  if (!snapshot.nativeEditing) dispatchEditorEvents(snapshot.element);
   return { ok: true, undone: true };
 }

@@ -21,6 +21,7 @@ import {
 } from "./messages.js";
 
 declare const __SMARTASSISTANCE_API_BASE_URL__: string;
+declare const __SMARTASSISTANCE_BETA_API_TOKEN__: string;
 const API_TIMEOUT_MS = 20_000;
 const CONTEXT_MENU_ID = "smartassistance-rewrite";
 let pending: { controller: AbortController; generationId: string; snapshotId: string } | undefined;
@@ -180,7 +181,9 @@ async function runRewrite(
     controller.signal.throwIfAborted();
     const token = stored[AUTH_TOKEN_STORAGE_KEY];
     const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (typeof token === "string" && token) headers.Authorization = `Bearer ${token}`;
+    const accessToken =
+      typeof token === "string" && token ? token : __SMARTASSISTANCE_BETA_API_TOKEN__;
+    if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
     const response = await fetch(`${__SMARTASSISTANCE_API_BASE_URL__}/v1/rewrites`, {
       method: "POST",
       headers,

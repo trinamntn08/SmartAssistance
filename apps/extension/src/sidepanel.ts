@@ -23,6 +23,7 @@ const workspace = elementById<HTMLElement>("workspace");
 const original = elementById<HTMLTextAreaElement>("original");
 const warning = elementById<HTMLParagraphElement>("rich-text-warning");
 const operation = elementById<HTMLSelectElement>("operation");
+const styleOption = elementById<HTMLLabelElement>("style-option");
 const tone = elementById<HTMLSelectElement>("tone");
 const language = elementById<HTMLSelectElement>("language");
 const generate = elementById<HTMLButtonElement>("generate");
@@ -44,6 +45,7 @@ function showStatus(message: string, error = false): void {
   status.classList.toggle("error", error);
 }
 function updateControls(): void {
+  styleOption.hidden = operation.value !== "improve";
   notice.hidden = consented;
   generate.disabled =
     !consented ||
@@ -127,7 +129,7 @@ function showFailure(response: ExtensionResponse): boolean {
   return false;
 }
 operation.addEventListener("change", () => {
-  if (operation.value === "translate" && language.value === "same") language.value = "en";
+  updateControls();
 });
 generate.addEventListener("click", () => {
   if (!activeState || !consented || generate.disabled) return;
@@ -135,7 +137,7 @@ generate.addEventListener("click", () => {
   const parsed = parseRewriteRequest({
     text: state.draft.text,
     operation: operation.value,
-    tone: tone.value,
+    ...(operation.value === "improve" ? { tone: tone.value } : {}),
     targetLanguage: language.value,
   });
   if (!parsed.success) {

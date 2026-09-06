@@ -6,8 +6,8 @@
 
 ## Context
 
-SmartAssistance must read user-invoked text from arbitrary web editors, rephrase
-or translate it, and safely replace the original. Editor text may contain private
+SmartAssistance must read user-invoked text from arbitrary web editors, fix its
+grammar or improve its writing, and safely replace the original. Editor text may contain private
 communications. An OpenAI API key cannot be shipped in browser code, and a
 general browser extension must not depend on ChatGPT website cookies or DOM
 automation.

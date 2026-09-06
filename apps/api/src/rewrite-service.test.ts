@@ -4,7 +4,7 @@ import type { AppError } from "./errors.js";
 import { RewriteService, type RewriteProvider } from "./rewrite-service.js";
 
 const request = {
-  operation: "rephrase" as const,
+  operation: "improve" as const,
   targetLanguage: "same",
   text: "send this tomorrow pls",
   tone: "natural" as const,

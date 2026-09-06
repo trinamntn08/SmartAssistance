@@ -23,8 +23,8 @@ implemented capabilities, verification evidence, and outstanding work.
   emails, comments, and short messages in Chrome.
 - User's current workflow: Draft text, copy it into a separate AI or translation
   product, describe the desired rewrite, and paste the result back.
-- Most important job to be done: Improve or translate the complete draft in its
-  original editor while preserving meaning and important details.
+- Most important job to be done: Fix grammar or improve the complete draft in
+  its original editor while preserving meaning and important details.
 - Accessibility and locale needs: Full keyboard operation, visible focus states,
   screen-reader labels, right-to-left text support, and a localized interface.
 
@@ -47,8 +47,9 @@ implemented capabilities, verification evidence, and outstanding work.
   or a keyboard shortcut.
 - Complete-field capture for plain inputs, textareas, and basic contenteditable
   editors.
-- Rephrase, grammar correction, concise, and translate operations.
-- Natural, formal, and casual tones.
+- Two writing modes: grammar correction and writing improvement.
+- Natural and formal styles for writing improvement; grammar correction preserves
+  the draft's existing style.
 - Automatic source-language detection and explicit target-language selection.
 - Preview, replace, copy, retry, and one-level undo.
 - Thin SmartAssistance API that validates requests and calls the OpenAI Responses
@@ -73,7 +74,8 @@ implemented capabilities, verification evidence, and outstanding work.
    focused.
 2. The extension captures the complete current field and indicates when applying
    the result may remove rich formatting.
-3. The user can select an operation, tone, and output language.
+3. The user can select a writing mode and output language; writing improvement
+   also offers a natural or formal style.
 4. The backend returns only a rewritten text value and operational metadata.
 5. The extension previews the result before replacement.
 6. Replacement occurs only if the editor still contains the captured version.

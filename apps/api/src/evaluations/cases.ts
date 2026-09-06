@@ -1,6 +1,6 @@
 import type { RewriteRequest } from "@smartassistance/contracts";
 
-export const REWRITE_EVALUATION_VERSION = "rewrite-evals-2026-09-05.1";
+export const REWRITE_EVALUATION_VERSION = "rewrite-evals-2026-09-06.1";
 
 export type RewriteInvariant =
   | { kind: "substring" | "token"; value: string }
@@ -25,7 +25,7 @@ function draft(
   tone: RewriteRequest["tone"] = "natural",
   targetLanguage = "same",
 ): RewriteRequest {
-  return { text, operation, tone, targetLanguage };
+  return { text, operation, targetLanguage, ...(operation === "improve" ? { tone } : {}) };
 }
 
 const longDraft = [
@@ -85,30 +85,30 @@ export const REWRITE_EVALUATION_CASES: readonly RewriteEvaluationCase[] = [
     humanReview: "Correct French agreement without adding formality or translating the draft.",
   },
   {
-    id: "rephrase-formal-facts",
+    id: "improve-formal-facts",
     request: draft(
       "Hi Ravi Shah, can you check the 35 samples for QA-208 by 2026-11-04?",
-      "rephrase",
+      "improve",
       "formal",
     ),
     invariants: [token("Ravi Shah"), token("35"), token("QA-208"), token("2026-11-04")],
     humanReview: "Use a formal request without turning it into an assigned or accepted commitment.",
   },
   {
-    id: "rephrase-casual-mention-emoji",
+    id: "improve-natural-mention-emoji",
     request: draft(
       "Thank you @nora for checking DOC-91. Your help was appreciated 🙂",
-      "rephrase",
-      "casual",
+      "improve",
+      "natural",
     ),
     invariants: [substring("@nora"), token("DOC-91"), substring("🙂")],
-    humanReview: "Sound natural and casual while keeping gratitude, the mention, and the emoji.",
+    humanReview: "Sound natural while keeping gratitude, the mention, and the emoji.",
   },
   {
-    id: "rephrase-paragraphs",
+    id: "improve-paragraphs",
     request: draft(
       "Mira Chen reviewed NOTE-11 yesterday.\n\nPlease comment at https://example.invalid/notes/NOTE-11.\n\nThanks for taking a look.",
-      "rephrase",
+      "improve",
     ),
     invariants: [
       token("Mira Chen"),
@@ -119,38 +119,35 @@ export const REWRITE_EVALUATION_CASES: readonly RewriteEvaluationCase[] = [
     humanReview: "Keep the three paragraph roles, chronology, and request unchanged.",
   },
   {
-    id: "rephrase-mixed-language",
-    request: draft(
-      "Bonjour Léa, the draft MIX-09 is ready. Merci pour ton aide, @lea!",
-      "rephrase",
-    ),
+    id: "improve-mixed-language",
+    request: draft("Bonjour Léa, the draft MIX-09 is ready. Merci pour ton aide, @lea!", "improve"),
     invariants: [token("Léa"), token("MIX-09"), substring("@lea")],
     humanReview: "Preserve French-English code switching and the friendly tone.",
   },
   {
-    id: "rephrase-japanese",
+    id: "improve-japanese",
     request: draft(
       "田中葵さん、案件JP-204の資料を見ていただけますか。締切は2026-10-16です。",
-      "rephrase",
+      "improve",
       "formal",
     ),
     invariants: [substring("田中葵"), substring("JP-204"), substring("2026-10-16")],
     humanReview: "Use natural Japanese politeness; keep the request and deadline.",
   },
   {
-    id: "concise-redundancy",
+    id: "improve-shorter-redundancy",
     request: draft(
       "I wanted to let you know that, as a quick update, we received 48 units for LOT-608 and we are waiting for inspection.",
-      "concise",
+      "improve",
     ),
     invariants: [token("48"), token("LOT-608"), forbidden("inspection is complete")],
     humanReview: "Remove filler while keeping receipt and pending inspection as distinct facts.",
   },
   {
-    id: "concise-negation-condition",
+    id: "improve-shorter-negation-condition",
     request: draft(
       "To be completely clear, we cannot promise delivery for ORDER-19 before 2026-11-08. Delivery depends on approval, which has not yet arrived.",
-      "concise",
+      "improve",
       "formal",
     ),
     invariants: [
@@ -163,10 +160,10 @@ export const REWRITE_EVALUATION_CASES: readonly RewriteEvaluationCase[] = [
       "Preserve negation, the earliest date qualification, and the pending approval condition.",
   },
   {
-    id: "concise-decimal-amounts",
+    id: "improve-shorter-decimal-amounts",
     request: draft(
       "For your information, the estimate for COST-73 is USD 1250.50, including 12 units, and this is only an estimate at this stage.",
-      "concise",
+      "improve",
     ),
     invariants: [
       token("COST-73"),
@@ -178,19 +175,19 @@ export const REWRITE_EVALUATION_CASES: readonly RewriteEvaluationCase[] = [
     humanReview: "Keep currency, decimal precision, quantity, and provisional status.",
   },
   {
-    id: "concise-arabic",
+    id: "improve-arabic",
     request: draft(
       "أود أن أوضح أن ليلى حسن راجعت الطلب AR-31 الذي يحتوي على 18 وحدة، ونحن ما زلنا ننتظر الموافقة.",
-      "concise",
+      "improve",
     ),
     invariants: [substring("ليلى حسن"), token("AR-31"), token("18")],
     humanReview: "Use natural Arabic and preserve the reviewer, quantity, and pending approval.",
   },
   {
-    id: "translate-english-french",
+    id: "improve-english-french",
     request: draft(
       "Mira Chen will review 16 files for CASE-15 on 2026-10-21.\n\nPlease use https://example.invalid/cases/CASE-15.",
-      "translate",
+      "improve",
       "formal",
       "fr",
     ),
@@ -202,13 +199,13 @@ export const REWRITE_EVALUATION_CASES: readonly RewriteEvaluationCase[] = [
       substring("https://example.invalid/cases/CASE-15"),
       paragraphs,
     ],
-    humanReview: "Translate into French and preserve the future commitment and paragraph roles.",
+    humanReview: "Return French while preserving the future commitment and paragraph roles.",
   },
   {
-    id: "translate-chinese-english",
+    id: "improve-chinese-english",
     request: draft(
       "请让Lin Yue检查编号CN-52的27份文件。尚未批准发货。",
-      "translate",
+      "improve",
       "natural",
       "en",
     ),
@@ -219,13 +216,13 @@ export const REWRITE_EVALUATION_CASES: readonly RewriteEvaluationCase[] = [
       forbidden("Shipment has been approved"),
     ],
     humanReview:
-      "Translate the Chinese request and preserve the explicit lack of shipment approval.",
+      "Return English for the Chinese request and preserve the explicit lack of shipment approval.",
   },
   {
-    id: "translate-english-arabic",
+    id: "improve-english-arabic",
     request: draft(
       "Please ask Mira Chen to review 23 items for AR-44. The report is at https://example.invalid/AR-44.",
-      "translate",
+      "improve",
       "natural",
       "ar",
     ),
@@ -239,10 +236,10 @@ export const REWRITE_EVALUATION_CASES: readonly RewriteEvaluationCase[] = [
       "Use natural RTL Arabic while preserving Latin names and exact digits as required by policy.",
   },
   {
-    id: "translate-spanish-english",
+    id: "improve-spanish-english",
     request: draft(
       "No puedo confirmar el envío de ES-72. Podría revisar 14 muestras si llega la aprobación.",
-      "translate",
+      "improve",
       "natural",
       "en",
     ),

@@ -5,7 +5,7 @@ import { loadConfig, type AppConfig } from "./config.js";
 import { createHttpServer } from "./http-server.js";
 import { RewriteService, type RewriteProvider } from "./rewrite-service.js";
 const request = {
-  operation: "rephrase",
+  operation: "improve",
   tone: "natural",
   targetLanguage: "same",
   text: "synthetic private draft",

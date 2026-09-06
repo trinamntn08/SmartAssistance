@@ -10,6 +10,7 @@ const apiBaseUrl = (process.env.SMARTASSISTANCE_API_BASE_URL ?? "http://127.0.0.
   /\/$/,
   "",
 );
+const betaApiToken = process.env.SMARTASSISTANCE_BETA_API_TOKEN ?? "";
 const apiUrl = new URL(apiBaseUrl);
 
 if (apiUrl.protocol !== "http:" && apiUrl.protocol !== "https:") {
@@ -23,6 +24,9 @@ if (apiUrl.username || apiUrl.password || apiUrl.search || apiUrl.hash) {
   throw new Error(
     "SMARTASSISTANCE_API_BASE_URL must not contain credentials, a query, or a fragment.",
   );
+}
+if (betaApiToken.length > 512) {
+  throw new Error("SMARTASSISTANCE_BETA_API_TOKEN must contain at most 512 characters.");
 }
 
 async function copyStaticFiles() {
@@ -49,6 +53,7 @@ const options = {
   bundle: true,
   define: {
     __SMARTASSISTANCE_API_BASE_URL__: JSON.stringify(apiBaseUrl),
+    __SMARTASSISTANCE_BETA_API_TOKEN__: JSON.stringify(betaApiToken),
   },
   entryNames: "[name]",
   entryPoints: {

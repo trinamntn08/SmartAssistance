@@ -30,6 +30,9 @@ function button(id: string): HTMLButtonElement {
 function field(id: string): HTMLTextAreaElement {
   return document.getElementById(id) as HTMLTextAreaElement;
 }
+function select(id: string): HTMLSelectElement {
+  return document.getElementById(id) as HTMLSelectElement;
+}
 function emit(state: ReadyDraftState): void {
   changed({ [ACTIVE_DRAFT_STORAGE_KEY]: { newValue: state } }, "session");
 }
@@ -80,6 +83,18 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe("preview identity and event ordering", () => {
+  it("shows style only for Improve writing and omits it for Fix grammar", async () => {
+    expect(document.getElementById("style-option")?.hidden).toBe(true);
+    button("generate").click();
+    expect(attempt().settings).toEqual({ operation: "grammar", targetLanguage: "same" });
+    finish(success());
+    await vi.waitFor(() => expect(field("preview").value).toBe("Rewrite A"));
+
+    select("operation").value = "improve";
+    select("operation").dispatchEvent(new Event("change"));
+    expect(document.getElementById("style-option")?.hidden).toBe(false);
+  });
+
   it("retains a response delivered before the generating and preview storage events", async () => {
     button("generate").click();
     finish(success());

@@ -4,8 +4,9 @@
 
 Capture reads only the complete focused eligible editor after a user invocation.
 It does not submit a request. First use requires acceptance of the disclosure;
-Generate then sends the captured text, operation, tone, and target language to the
-configured SmartAssistance API and OpenAI. No surrounding page, thread, URL,
+Generate then sends the captured text, writing mode, applicable improvement
+style, and target language to the configured SmartAssistance API and OpenAI. No
+surrounding page, thread, URL,
 cookies, browsing history, or model API key is sent from the extension.
 
 Replacement always requires a separate user action. Cancel stops waiting and

@@ -22,15 +22,19 @@ function fixture(id: string): RewriteEvaluationCase {
 const names = fixture("grammar-names-identifiers");
 
 describe("versioned rewrite corpus", () => {
-  it("has valid requests and self-consistent invariants across all operations and tones", () => {
+  it("has valid requests and self-consistent invariants across modes and improvement styles", () => {
     expect(validateEvaluationCases(REWRITE_EVALUATION_CASES)).toEqual([]);
     expect(REWRITE_EVALUATION_CASES).toHaveLength(20);
     expect(new Set(REWRITE_EVALUATION_CASES.map((item) => item.request.operation))).toEqual(
       new Set(REWRITE_OPERATIONS),
     );
-    expect(new Set(REWRITE_EVALUATION_CASES.map((item) => item.request.tone))).toEqual(
-      new Set(REWRITE_TONES),
-    );
+    expect(
+      new Set(
+        REWRITE_EVALUATION_CASES.flatMap((item) =>
+          item.request.tone === undefined ? [] : [item.request.tone],
+        ),
+      ),
+    ).toEqual(new Set(REWRITE_TONES));
     const long = fixture("grammar-near-limit");
     expect(long.request.text.length).toBeGreaterThanOrEqual(9000);
     expect(long.request.text.length).toBeLessThanOrEqual(MAX_REWRITE_CHARACTERS);
@@ -117,8 +121,8 @@ describe("deterministic preservation checks", () => {
   });
 
   it("detects changed CJK and RTL names without imposing Latin word boundaries", () => {
-    const japanese = fixture("rephrase-japanese");
-    const arabic = fixture("concise-arabic");
+    const japanese = fixture("improve-japanese");
+    const arabic = fixture("improve-arabic");
     expect(
       evaluateRewrite(japanese, japanese.request.text.replace("田中葵", "田中花")).passed,
     ).toBe(false);
@@ -128,7 +132,7 @@ describe("deterministic preservation checks", () => {
   });
 
   it("preserves paragraph count across newline conventions and catches merged paragraphs", () => {
-    const item = fixture("rephrase-paragraphs");
+    const item = fixture("improve-paragraphs");
     expect(evaluateRewrite(item, item.request.text.replaceAll("\n", "\r\n")).passed).toBe(true);
     expect(
       evaluateRewrite(item, item.request.text.replaceAll("\n\n", " ")).failures,

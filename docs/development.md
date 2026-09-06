@@ -67,6 +67,7 @@ multiple replicas. Do not expose the local anonymous API on a public interface.
 | `MAX_BODY_BYTES` | 65536 |
 | `SMARTASSISTANCE_ALLOWED_ORIGINS` | Exact comma-separated origins; required in production; wildcard rejected |
 | `SMARTASSISTANCE_API_BASE_URL` | Export in the extension build shell; default `http://127.0.0.1:8787`; HTTPS required outside loopback |
+| `SMARTASSISTANCE_BETA_API_TOKEN` | Export only for a bounded private-beta extension build; embeds a shared API token and must never be treated as a secret |
 
 With no origin list, development permits Chrome extension origins, and requests
 without an Origin header. Other browser origins are rejected before provider work.
@@ -76,6 +77,8 @@ Stopping a request cannot undo provider processing that already occurred.
 
 The extension build does not automatically load `.env`; `dev:api` does. Changing
 the API URL requires a rebuild, extension reload, and consent for that endpoint.
+For the Render and private Chrome Web Store workflow, see the
+[private beta guide](private-beta.md).
 
 ## Test strategy
 
@@ -98,8 +101,23 @@ be run repeatedly after a build without formatting generated bundles.
 
 ## Manual extension checks
 
+Managed contenteditable editors with Lexical/Draft markers use native plain-text
+insertion. Their Undo restores text, not original formatting. After reloading the
+extension, refresh the website before testing Replace and Undo. On 2026-09-06,
+the user reported successful Facebook/Messenger retesting after this change;
+Gmail Replace had already been reported working. This covers the tested fields,
+not every composer or feature. See [manual verification](status.md#manual-verification-reported-on-2026-09-06)
+for evidence and remaining checks. A synthetic browser fixture does not prove a
+particular composer is supported. See
+[ADR-0003](decisions/0003-managed-editor-native-insertion.md).
+
 - Verify input, textarea, and contenteditable fields.
 - Verify disabled, read-only, password, and unsupported fields are rejected.
 - Start a rewrite, change the source field, then confirm Replace is refused.
 - Verify preview, copy, replace, and undo through keyboard-only navigation.
 - Confirm rich-text fields show the plain-text replacement warning.
+- On managed editors, verify Replace remains after typing another character,
+  and verify Undo separately with a fresh capture and no intervening edit.
+- Use synthetic drafts; record site, composer type, Chrome version, and outcome.
+  Check mention/emoji handling separately. Submission is a separate manual test,
+  not implied by successful visible replacement.

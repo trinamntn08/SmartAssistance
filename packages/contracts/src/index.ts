@@ -1,5 +1,5 @@
-export const REWRITE_OPERATIONS = ["rephrase", "grammar", "concise", "translate"] as const;
-export const REWRITE_TONES = ["natural", "formal", "casual"] as const;
+export const REWRITE_OPERATIONS = ["grammar", "improve"] as const;
+export const REWRITE_TONES = ["natural", "formal"] as const;
 export const MAX_REWRITE_CHARACTERS = 10_000;
 export const MAX_REWRITTEN_CHARACTERS = 20_000;
 
@@ -9,7 +9,7 @@ export type RewriteTone = (typeof REWRITE_TONES)[number];
 export interface RewriteRequest {
   text: string;
   operation: RewriteOperation;
-  tone: RewriteTone;
+  tone?: RewriteTone;
   targetLanguage: string;
 }
 
@@ -86,8 +86,14 @@ export function parseRewriteRequest(input: unknown): ParseResult<RewriteRequest>
     return { success: false, message: "Operation is not supported." };
   }
 
-  if (!isOneOf(input.tone, REWRITE_TONES)) {
-    return { success: false, message: "Tone is not supported." };
+  const tone = isOneOf(input.tone, REWRITE_TONES) ? input.tone : undefined;
+
+  if (input.operation === "improve" && tone === undefined) {
+    return { success: false, message: "Choose Natural or Formal when improving writing." };
+  }
+
+  if (input.operation === "grammar" && input.tone !== undefined) {
+    return { success: false, message: "Fix grammar does not use a tone." };
   }
 
   if (typeof input.targetLanguage !== "string" || !LANGUAGE_TAG.test(input.targetLanguage)) {
@@ -97,14 +103,10 @@ export function parseRewriteRequest(input: unknown): ParseResult<RewriteRequest>
     };
   }
 
-  if (
-    input.targetLanguage.length > 35 ||
-    (input.operation === "translate" && input.targetLanguage === "same")
-  ) {
+  if (input.targetLanguage.length > 35) {
     return {
       success: false,
-      message:
-        "Choose an explicit target language for translation, using a language tag of at most 35 characters.",
+      message: "Choose 'same' or a language tag of at most 35 characters.",
     };
   }
 
@@ -113,7 +115,7 @@ export function parseRewriteRequest(input: unknown): ParseResult<RewriteRequest>
     value: {
       text: input.text,
       operation: input.operation,
-      tone: input.tone,
+      ...(tone === undefined ? {} : { tone }),
       targetLanguage: input.targetLanguage,
     },
   };

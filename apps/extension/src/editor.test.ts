@@ -6,15 +6,15 @@ import { applyRewrite, captureFocusedEditor, clearEditorSnapshot, undoRewrite } 
 import { SNAPSHOT_TTL_MS } from "./messages.js";
 
 describe("editor integration", () => {
-  afterEach(() => {
+  afterEach(async () => {
     clearEditorSnapshot();
     vi.useRealTimers();
   });
-  beforeEach(() => {
+  beforeEach(async () => {
     document.body.replaceChildren();
   });
 
-  it("captures, replaces, emits input events, and restores a textarea", () => {
+  it("captures, replaces, emits input events, and restores a textarea", async () => {
     const textarea = document.createElement("textarea");
     textarea.value = "hello there";
     const inputListener = vi.fn();
@@ -28,18 +28,18 @@ describe("editor integration", () => {
       throw new Error("Expected a captured draft.");
     }
 
-    expect(applyRewrite(captured.draft.snapshotId, "Hello there.")).toEqual({
+    expect(await applyRewrite(captured.draft.snapshotId, "Hello there.")).toEqual({
       applied: true,
       ok: true,
     });
     expect(textarea.value).toBe("Hello there.");
     expect(inputListener).toHaveBeenCalledOnce();
 
-    expect(undoRewrite(captured.draft.snapshotId)).toEqual({ ok: true, undone: true });
+    expect(await undoRewrite(captured.draft.snapshotId)).toEqual({ ok: true, undone: true });
     expect(textarea.value).toBe("hello there");
   });
 
-  it("does not overwrite a draft that changed after capture", () => {
+  it("does not overwrite a draft that changed after capture", async () => {
     const input = document.createElement("input");
     input.type = "text";
     input.value = "first draft";
@@ -52,14 +52,14 @@ describe("editor integration", () => {
     }
 
     input.value = "user kept typing";
-    expect(applyRewrite(captured.draft.snapshotId, "model output")).toMatchObject({
+    expect(await applyRewrite(captured.draft.snapshotId, "model output")).toMatchObject({
       code: "CONFLICT",
       ok: false,
     });
     expect(input.value).toBe("user kept typing");
   });
 
-  it("rejects password fields", () => {
+  it("rejects password fields", async () => {
     const input = document.createElement("input");
     input.type = "password";
     input.value = "not-for-the-model";
@@ -88,7 +88,7 @@ describe("editor integration", () => {
     expect(captureFocusedEditor()).toMatchObject({ ok: false });
   });
 
-  it("replaces email input without throwing and retains undo", () => {
+  it("replaces email input without throwing and retains undo", async () => {
     const input = document.createElement("input");
     input.type = "email";
     input.value = "before@example.com";
@@ -98,17 +98,17 @@ describe("editor integration", () => {
     input.focus();
     const captured = captureFocusedEditor();
     if (!captured.ok || !("draft" in captured)) throw new Error("No capture");
-    expect(applyRewrite(captured.draft.snapshotId, "after@example.com")).toMatchObject({
+    expect(await applyRewrite(captured.draft.snapshotId, "after@example.com")).toMatchObject({
       ok: true,
     });
     expect(listener).toHaveBeenCalledOnce();
-    expect(undoRewrite(captured.draft.snapshotId)).toMatchObject({ ok: true });
+    expect(await undoRewrite(captured.draft.snapshotId)).toMatchObject({ ok: true });
     expect(input.value).toBe("before@example.com");
   });
 
   it.each(["readonly", "disabled", "hidden", "payment"])(
     "rechecks %s before applying",
-    (change) => {
+    async (change) => {
       const input = document.createElement("input");
       input.value = "original";
       document.body.append(input);
@@ -119,7 +119,7 @@ describe("editor integration", () => {
       if (change === "disabled") input.disabled = true;
       if (change === "hidden") input.style.display = "none";
       if (change === "payment") input.autocomplete = "cc-number";
-      expect(applyRewrite(captured.draft.snapshotId, "replacement")).toMatchObject({
+      expect(await applyRewrite(captured.draft.snapshotId, "replacement")).toMatchObject({
         ok: false,
         code: "CONFLICT",
       });
@@ -127,7 +127,7 @@ describe("editor integration", () => {
     },
   );
 
-  it("clears expired captures and refuses both replacement and undo", () => {
+  it("clears expired captures and refuses both replacement and undo", async () => {
     vi.useFakeTimers();
     const input = document.createElement("textarea");
     input.value = "original";
@@ -136,11 +136,11 @@ describe("editor integration", () => {
     const captured = captureFocusedEditor();
     if (!captured.ok || !("draft" in captured)) throw new Error("No capture");
     vi.advanceTimersByTime(SNAPSHOT_TTL_MS);
-    expect(applyRewrite(captured.draft.snapshotId, "new")).toMatchObject({ ok: false });
-    expect(undoRewrite(captured.draft.snapshotId)).toMatchObject({ ok: false });
+    expect(await applyRewrite(captured.draft.snapshotId, "new")).toMatchObject({ ok: false });
+    expect(await undoRewrite(captured.draft.snapshotId)).toMatchObject({ ok: false });
   });
 
-  it("treats model markup as text and restores original contenteditable nodes", () => {
+  it("treats model markup as text and restores original contenteditable nodes", async () => {
     const editor = document.createElement("div");
     editor.setAttribute("contenteditable", "true");
     editor.tabIndex = 0;
@@ -151,31 +151,31 @@ describe("editor integration", () => {
     const captured = captureFocusedEditor();
     if (!captured.ok || !("draft" in captured)) throw new Error("No capture");
     expect(
-      applyRewrite(captured.draft.snapshotId, "<script>test</script>\nsecond paragraph"),
+      await applyRewrite(captured.draft.snapshotId, "<script>test</script>\nsecond paragraph"),
     ).toMatchObject({ ok: true });
     expect(editor.querySelector("script")).toBeNull();
     expect(editor.textContent).toContain("\nsecond paragraph");
-    expect(undoRewrite(captured.draft.snapshotId)).toMatchObject({ ok: true });
+    expect(await undoRewrite(captured.draft.snapshotId)).toMatchObject({ ok: true });
     expect(editor.firstChild).toBe(originalNode);
     expect(editor.innerHTML).toBe("<b>original</b>");
   });
 
-  it("rejects undo after subsequent user edits", () => {
+  it("rejects undo after subsequent user edits", async () => {
     const input = document.createElement("textarea");
     input.value = "original";
     document.body.append(input);
     input.focus();
     const captured = captureFocusedEditor();
     if (!captured.ok || !("draft" in captured)) throw new Error("No capture");
-    applyRewrite(captured.draft.snapshotId, "replacement");
+    await applyRewrite(captured.draft.snapshotId, "replacement");
     input.value = "user changed this";
-    expect(undoRewrite(captured.draft.snapshotId)).toMatchObject({ ok: false });
+    expect(await undoRewrite(captured.draft.snapshotId)).toMatchObject({ ok: false });
     expect(input.value).toBe("user changed this");
   });
 
   it.each(["text", "attributes"])(
     "rejects undo when the page mutates detached original %s",
-    (change) => {
+    async (change) => {
       const editor = document.createElement("div");
       editor.setAttribute("contenteditable", "true");
       editor.tabIndex = 0;
@@ -186,13 +186,16 @@ describe("editor integration", () => {
       editor.focus();
       const captured = captureFocusedEditor();
       if (!captured.ok || !("draft" in captured)) throw new Error("No capture");
-      applyRewrite(captured.draft.snapshotId, "replacement");
+      await applyRewrite(captured.draft.snapshotId, "replacement");
       if (change === "text") originalNode.textContent = "Changed by the page";
       else originalNode.setAttribute("onclick", "pageAction()");
       const inputListener = vi.fn();
       editor.addEventListener("input", inputListener);
 
-      expect(undoRewrite(captured.draft.snapshotId)).toMatchObject({ ok: false, code: "CONFLICT" });
+      expect(await undoRewrite(captured.draft.snapshotId)).toMatchObject({
+        ok: false,
+        code: "CONFLICT",
+      });
       expect(editor.textContent).toBe("replacement");
       expect(originalNode.parentNode).toBeNull();
       expect(inputListener).not.toHaveBeenCalled();
@@ -201,7 +204,7 @@ describe("editor integration", () => {
 
   it.each(["connected", "detached"])(
     "does not steal original nodes reparented into a %s container",
-    (location) => {
+    async (location) => {
       const editor = document.createElement("div");
       editor.setAttribute("contenteditable", "true");
       editor.tabIndex = 0;
@@ -212,18 +215,21 @@ describe("editor integration", () => {
       editor.focus();
       const captured = captureFocusedEditor();
       if (!captured.ok || !("draft" in captured)) throw new Error("No capture");
-      applyRewrite(captured.draft.snapshotId, "replacement");
+      await applyRewrite(captured.draft.snapshotId, "replacement");
       const otherContainer = document.createElement("div");
       if (location === "connected") document.body.append(otherContainer);
       otherContainer.append(originalNode);
 
-      expect(undoRewrite(captured.draft.snapshotId)).toMatchObject({ ok: false, code: "CONFLICT" });
+      expect(await undoRewrite(captured.draft.snapshotId)).toMatchObject({
+        ok: false,
+        code: "CONFLICT",
+      });
       expect(editor.textContent).toBe("replacement");
       expect(otherContainer.firstChild).toBe(originalNode);
     },
   );
 
-  it("rejects undo when detached original nodes have been adopted by another document", () => {
+  it("rejects undo when detached original nodes have been adopted by another document", async () => {
     const editor = document.createElement("div");
     editor.setAttribute("contenteditable", "true");
     editor.tabIndex = 0;
@@ -234,11 +240,14 @@ describe("editor integration", () => {
     editor.focus();
     const captured = captureFocusedEditor();
     if (!captured.ok || !("draft" in captured)) throw new Error("No capture");
-    applyRewrite(captured.draft.snapshotId, "replacement");
+    await applyRewrite(captured.draft.snapshotId, "replacement");
     const otherDocument = document.implementation.createHTMLDocument();
     otherDocument.adoptNode(originalNode);
 
-    expect(undoRewrite(captured.draft.snapshotId)).toMatchObject({ ok: false, code: "CONFLICT" });
+    expect(await undoRewrite(captured.draft.snapshotId)).toMatchObject({
+      ok: false,
+      code: "CONFLICT",
+    });
     expect(editor.textContent).toBe("replacement");
     expect(originalNode.ownerDocument).toBe(otherDocument);
     expect(originalNode.parentNode).toBeNull();

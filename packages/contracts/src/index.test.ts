@@ -6,7 +6,7 @@ describe("parseRewriteRequest", () => {
   it("accepts a valid same-language rewrite", () => {
     const result = parseRewriteRequest({
       text: "pls send it tomorrow",
-      operation: "rephrase",
+      operation: "improve",
       tone: "natural",
       targetLanguage: "same",
     });
@@ -15,7 +15,7 @@ describe("parseRewriteRequest", () => {
       success: true,
       value: {
         text: "pls send it tomorrow",
-        operation: "rephrase",
+        operation: "improve",
         tone: "natural",
         targetLanguage: "same",
       },
@@ -25,7 +25,7 @@ describe("parseRewriteRequest", () => {
   it("rejects unexpected fields", () => {
     const result = parseRewriteRequest({
       text: "Hello",
-      operation: "rephrase",
+      operation: "improve",
       tone: "natural",
       targetLanguage: "en",
       pageContent: "must not be accepted",
@@ -38,11 +38,24 @@ describe("parseRewriteRequest", () => {
     const result = parseRewriteRequest({
       text: "a".repeat(MAX_REWRITE_CHARACTERS + 1),
       operation: "grammar",
-      tone: "formal",
       targetLanguage: "en-US",
     });
 
     expect(result.success).toBe(false);
+  });
+
+  it("requires a style only for Improve writing", () => {
+    expect(
+      parseRewriteRequest({ text: "Hello", operation: "improve", targetLanguage: "same" }),
+    ).toEqual({ success: false, message: "Choose Natural or Formal when improving writing." });
+    expect(
+      parseRewriteRequest({
+        text: "Hello",
+        operation: "grammar",
+        tone: "formal",
+        targetLanguage: "same",
+      }),
+    ).toEqual({ success: false, message: "Fix grammar does not use a tone." });
   });
 });
 

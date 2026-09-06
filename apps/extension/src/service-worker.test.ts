@@ -45,7 +45,7 @@ function storageArea(values: Record<string, unknown>) {
   };
 }
 
-async function loadWorker(initial?: unknown) {
+async function loadWorker(initial?: unknown, betaApiToken = "") {
   const sessionValues: Record<string, unknown> =
     initial === undefined ? {} : { [ACTIVE_DRAFT_STORAGE_KEY]: structuredClone(initial) };
   const localValues: Record<string, unknown> = {
@@ -86,6 +86,7 @@ async function loadWorker(initial?: unknown) {
   vi.stubGlobal("chrome", browser);
   vi.stubGlobal("fetch", fetchMock);
   vi.stubGlobal("__SMARTASSISTANCE_API_BASE_URL__", API_URL);
+  vi.stubGlobal("__SMARTASSISTANCE_BETA_API_TOKEN__", betaApiToken);
   await import("./service-worker.js");
   // Startup uses only immediately resolved storage mocks; drain its transitions.
   await new Promise((resolve) => setTimeout(resolve, 0));
@@ -114,7 +115,7 @@ const runRequest: ExtensionRequest = {
   type: "RUN_REWRITE",
   snapshotId: "snapshot-a",
   generationId: "generation-a",
-  settings: { operation: "rephrase", tone: "natural", targetLanguage: "same" },
+  settings: { operation: "improve", tone: "natural", targetLanguage: "same" },
 };
 
 function pendingFetch(fetchMock: ReturnType<typeof vi.fn<typeof fetch>>): AbortSignal[] {
@@ -245,6 +246,23 @@ describe("service worker private state and request boundaries", () => {
     expect(await send(runRequest)).toMatchObject({ ok: false, code: "AUTHENTICATION_REQUIRED" });
     expect(browser.storage.session.set).not.toHaveBeenCalled();
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("uses the beta build token when no user token is present", async () => {
+    const { fetchMock, send } = await loadWorker(readyDraft(), "synthetic-beta-token");
+    const signals = pendingFetch(fetchMock);
+    const rewrite = send(runRequest);
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+    expect(fetchMock.mock.calls[0]?.[1]?.headers).toMatchObject({
+      Authorization: "Bearer synthetic-beta-token",
+    });
+    await send({
+      type: "CANCEL_REWRITE",
+      snapshotId: "snapshot-a",
+      generationId: "generation-a",
+    });
+    expect(signals[0]?.aborted).toBe(true);
+    await rewrite;
   });
 
   it("cancels only the generation belonging to the requested snapshot and attempt", async () => {

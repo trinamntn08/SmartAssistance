@@ -5,6 +5,15 @@ interface SmartAssistanceWindow extends Window {
   __smartAssistanceContentScriptLoaded?: boolean;
 }
 const smartWindow = window as SmartAssistanceWindow;
+function mutationFailed() {
+  clearEditorSnapshot();
+  return {
+    ok: false,
+    code: "CONFLICT",
+    message:
+      "The editor could not complete the change. Check the field and copy the preview instead.",
+  };
+}
 if (!smartWindow.__smartAssistanceContentScriptLoaded) {
   smartWindow.__smartAssistanceContentScriptLoaded = true;
   window.addEventListener("pagehide", () => clearEditorSnapshot());
@@ -22,11 +31,15 @@ if (!smartWindow.__smartAssistanceContentScriptLoaded) {
         sendResponse(captureFocusedEditor());
         break;
       case "APPLY_REWRITE":
-        sendResponse(applyRewrite(message.snapshotId, message.text));
-        break;
+        void applyRewrite(message.snapshotId, message.text).then(sendResponse, () =>
+          sendResponse(mutationFailed()),
+        );
+        return true;
       case "UNDO_REWRITE":
-        sendResponse(undoRewrite(message.snapshotId));
-        break;
+        void undoRewrite(message.snapshotId).then(sendResponse, () =>
+          sendResponse(mutationFailed()),
+        );
+        return true;
       case "CLEAR_SNAPSHOT":
         clearEditorSnapshot(message.snapshotId);
         sendResponse({ ok: true, cleared: true });

@@ -64,7 +64,7 @@ flowchart LR
 | `apps/api/src/http-server.ts`, `rate-limit.ts` | HTTP, origin/auth checks, admission limits, deadlines, safe logs |
 | `apps/api/src/rewrite-service.ts` | Provider interface and result validation without HTTP or SDK dependencies |
 | `apps/api/src/openai-rewrite-provider.ts` | SDK transport, cancellation, output checks, provider error mapping |
-| `apps/api/src/rewrite-policy.ts` | Versioned operation and tone instructions |
+| `apps/api/src/rewrite-policy.ts` | Versioned writing-mode and style instructions |
 | `apps/api/src/evaluations/` | Synthetic corpus, deterministic evaluator, opt-in live runner |
 
 Both applications depend on contracts. The HTTP layer calls the domain service;
@@ -77,11 +77,16 @@ domain service does not import Chrome, the HTTP server, or the OpenAI SDK.
 - Captures a focused editor only after an explicit user gesture.
 - Keeps DOM access inside a content script and network access inside the service
   worker.
-- Provides operation, tone, and language controls in a side panel.
+- Provides writing-mode and output-language controls in a side panel; style is
+  available only for writing improvement.
 - Binds each generation to a tab, document, snapshot, and attempt ID. Serialized
   state transitions prevent older asynchronous results from becoming current.
 - Compares the complete captured text and contenteditable markup before applying;
   retains one temporary undo value. See ADR-0002 for node restoration safeguards.
+- Uses browser-native plain-text insertion for managed editors with Lexical/Draft
+  markers, checking the resulting text after queued reconciliation. Undo on this
+  path restores text rather than original nodes or formatting; see
+  [ADR-0003](../decisions/0003-managed-editor-native-insertion.md).
 - Requires versioned first-use consent at the service-worker boundary, scopes it
   to the configured API endpoint, and expires captures after ten minutes.
 
@@ -117,8 +122,8 @@ domain service does not import Chrome, the HTTP server, or the OpenAI SDK.
 1. A user gesture grants temporary tab access and opens the side panel.
 2. The content script validates the focused element and returns its plain text,
    expiry, and snapshot identifier. The worker records the top-level document ID.
-3. The side panel submits the requested operation, tone, and language through the
-   service worker.
+3. The side panel submits the requested writing mode, optional improvement style,
+   and language through the service worker.
 4. The worker validates consent and the active snapshot, obtains text from its own
    capture, and sends the request over HTTPS (HTTP is allowed for loopback development).
    It never sends the page URL, surrounding DOM, or browsing history.
@@ -156,12 +161,13 @@ text, never interpreted as HTML or code.
 | Endpoint | Behavior |
 | --- | --- |
 | `GET /healthz` | Returns `status` and `providerConfigured`; missing development credentials produce `degraded` with HTTP 200. This does not probe the provider. |
-| `POST /v1/rewrites` | Accepts JSON containing only `text`, `operation`, `tone`, and `targetLanguage`; returns `rewrittenText`, `requestId`, and `model`. |
+| `POST /v1/rewrites` | Accepts JSON containing only `text`, `operation`, optional `tone`, and `targetLanguage`; returns `rewrittenText`, `requestId`, and `model`. |
 | `OPTIONS` | Returns CORS preflight headers for an allowed origin. |
 
-Operations are `rephrase`, `grammar`, `concise`, and `translate`; tones are
-`natural`, `formal`, and `casual`. The target is `same` or a language tag such as
-`fr-FR`; translation requires an explicit target. Input is limited to 10,000
+Operations are `grammar` and `improve`. Grammar correction does not accept a
+tone and preserves the draft's existing style. Writing improvement requires a
+`natural` or `formal` tone. The target is `same` or a language tag such as
+`fr-FR`; choosing another language translates the selected result. Input is limited to 10,000
 JavaScript string code units, output to 20,000. Unknown request fields are rejected.
 `detectedLanguage` is optional in the contract but the current adapter does not
 populate it; source-language handling is delegated to the rewrite instructions.
@@ -187,7 +193,8 @@ constant-time comparison of SHA-256 digests. CORS is an origin restriction, not
 user authentication. The worker can forward `applicationAccessToken` from
 session storage, but no login, token issuance, or refresh flow is implemented.
 Setting production environment variables alone does not deliver a usable hosted
-multi-user product.
+multi-user product. A separate, explicitly time-limited shared-token workflow
+exists only for private beta testing; see [ADR-0004](../decisions/0004-private-beta-shared-token.md).
 
 ### Execution and failure limits
 

@@ -36,7 +36,7 @@ describe("message boundaries", () => {
         type: "RUN_REWRITE",
         snapshotId: "s",
         generationId: "g",
-        settings: { operation: "grammar", tone: "natural", targetLanguage: "same" },
+        settings: { operation: "grammar", targetLanguage: "same" },
       }),
     ).toBe(true);
     expect(
@@ -46,7 +46,6 @@ describe("message boundaries", () => {
         generationId: "g",
         settings: {
           operation: "grammar",
-          tone: "natural",
           targetLanguage: "same",
           text: "injected",
         },

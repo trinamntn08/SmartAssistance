@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "SmartAssistance",
-  "description": "Rephrase or translate text in the editor you are using.",
+  "description": "Fix grammar or improve text in the editor you are using.",
   "version": "0.1.0",
   "minimum_chrome_version": "116",
   "permissions": ["activeTab", "alarms", "contextMenus", "scripting", "sidePanel", "storage"],

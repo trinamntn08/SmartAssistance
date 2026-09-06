@@ -1,7 +1,7 @@
 # Rewrite evaluations
 
-`cases.ts` is a versioned initial corpus of 20 synthetic drafts. It covers all
-four operations and three tones, names, numbers, dates, identifiers, links,
+`cases.ts` is a versioned initial corpus of 20 synthetic drafts. It covers both
+writing modes and the two improvement styles, names, numbers, dates, identifiers, links,
 email addresses, mentions, emoji, negation, conditional commitments, paragraph
 breaks, French, Spanish, Japanese, Chinese, Arabic, mixed-language passages,
 instruction-like input, and a draft near the 10,000-character input limit.

@@ -174,6 +174,54 @@ for (const [selector, output] of [
       .toBe(original);
   });
 }
+test("managed editor receives native input and retains replacement and undo", async ({ app }) => {
+  await app.editor.locator("#rich").evaluate((element) => {
+    element.setAttribute("data-lexical-editor", "true");
+    element.addEventListener("input", (event) => {
+      if (event instanceof InputEvent && event.inputType === "insertText") {
+        element.setAttribute("data-accepted-text", (element as HTMLElement).innerText);
+      }
+    });
+  });
+  await app.capture("#rich");
+  await accept(app);
+  app.output = "<b>Plain text</b>\nSecond line";
+  await app.panel.locator("#generate").click();
+  await expect(app.panel.locator("#preview")).toHaveValue(app.output);
+  await app.panel.locator("#replace").click();
+  await expect(app.panel.locator("#undo")).toBeEnabled();
+  await expect(app.editor.locator("#rich")).toHaveAttribute("data-accepted-text", app.output);
+  expect(await app.editor.locator("#rich").innerText()).toBe(app.output);
+  await app.panel.locator("#undo").click();
+  await expect(app.editor.locator("#rich")).toHaveAttribute(
+    "data-accepted-text",
+    "Original rich text",
+  );
+  expect(await app.editor.locator("#rich").innerText()).toBe("Original rich text");
+});
+
+test("managed editor that restores its own state does not report successful replacement", async ({
+  app,
+}) => {
+  await app.editor.locator("#rich").evaluate((element) => {
+    element.setAttribute("data-lexical-editor", "true");
+    const original = element.innerHTML;
+    element.addEventListener("input", () => {
+      queueMicrotask(() => {
+        element.innerHTML = original;
+      });
+    });
+  });
+  await app.capture("#rich");
+  await accept(app);
+  await app.panel.locator("#generate").click();
+  await expect(app.panel.locator("#preview")).toHaveValue(app.output);
+  await app.panel.locator("#replace").click();
+  await expect(app.panel.locator("#status")).toContainText("did not accept");
+  expect(await app.editor.locator("#rich").innerText()).toBe("Original rich text");
+  await expect(app.panel.locator("#copy")).toBeVisible();
+});
+
 test("late rewrite cannot be attached to a recaptured draft", async ({ app }) => {
   await app.capture("#draft");
   await accept(app);
@@ -218,7 +266,7 @@ test("consent cannot be bypassed, cancellation and clearing discard state", asyn
       type: "RUN_REWRITE",
       snapshotId: state?.draft.snapshotId ?? "",
       generationId: "attempt",
-      settings: { operation: "grammar", tone: "natural", targetLanguage: "same" },
+      settings: { operation: "grammar", targetLanguage: "same" },
     }),
   ).toMatchObject({ ok: false, code: "AUTHENTICATION_REQUIRED" });
   expect(app.calls).toBe(0);
