@@ -4,6 +4,16 @@ Snapshot: 2026-10-04. The local MVP is implemented. Public release is not comple
 The [product brief](product/PROJECT_BRIEF.md) defines the target requirements;
 the [architecture overview](architecture/README.md) describes the current code.
 
+## Step record: 2026-10-04 local translation adapter
+
+- Outcome: added the injected Chrome local translation adapter with safe errors,
+  bounded setup/detection/translation, confidence checks, explicit Chinese
+  mappings, instance reuse, cancellation, disposal, and late-object cleanup.
+- Validation: scoped Biome formatting/lint passed; `npm test --
+  apps/extension/src/local-translation.test.ts` passed all 30 tests. The initial
+  sandbox test startup hit `spawn EPERM`; approved execution passed.
+- Follow-up: panel/worker integration and real-model verification remain pending.
+
 ## Step record: 2026-10-04 local translation feasibility
 
 - Outcome: added an isolated API probe and accepted
