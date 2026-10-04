@@ -56,6 +56,16 @@ These instructions apply to the entire repository. A more deeply nested
 
 ## Completion criteria
 
+- Finish each cohesive implementation step with a progress record in
+  `docs/status.md` and a Git commit before starting the next step. Record the
+  date, outcome, checks actually run and their results, and remaining follow-up.
+  Update relevant product, setup, and architecture documentation in that commit.
+- Commit completed work without asking again when it is within the authorized
+  task. Stage only files belonging to the step; preserve unrelated changes and
+  exclude secrets and generated artifacts. For an explicitly requested snapshot,
+  include the reviewed current state. Do not push unless authorized.
+- If validation fails or a commit is blocked, record and report the blocker;
+  do not describe the step as complete. Report the commit hash when successful.
 - Run the configured formatter, linter, type checker, tests, and build relevant to
   the change.
 - Review the diff for accidental generated files, secrets, and unrelated edits.

@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+!.env.release.example
 *.local
 *.pem
 *.key
@@ -38,6 +39,8 @@ out/
 *.pid
 *.sqlite
 *.sqlite3
+smartassistance-beta.zip
+smartassistance-beta.next.zip
 tmp/
 temp/
 

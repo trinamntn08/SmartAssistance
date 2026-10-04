@@ -1,14 +1,47 @@
 # Implementation status
 
-Snapshot: 2026-09-06. The local MVP is implemented. Public release is not complete.
+Snapshot: 2026-10-04. The local MVP is implemented. Public release is not complete.
 The [product brief](product/PROJECT_BRIEF.md) defines the target requirements;
 the [architecture overview](architecture/README.md) describes the current code.
 
+## Step record: 2026-10-04 current-state snapshot
+
+- Outcome: checkpoint the current reading translation, active-reading, local
+  pronunciation, editor compatibility, extension assets, and release packaging
+  work, including its product documentation and ADRs 0005–0012.
+- Workflow: `AGENTS.md`, `CONTRIBUTING.md`, and the README now require a progress
+  record and Git commit after each completed cohesive step, before the next step.
+- Validation: `npm run format` passed with no changes. `npm run check` passed
+  formatting, lint, workspace/test type checks, 212 Vitest tests across 15 files,
+  all workspace builds, and 21 Chromium workflow tests. The initial sandbox run
+  stopped at Vitest startup with `spawn EPERM`; the approved rerun passed.
+  `git diff --check` passed, and the snapshot file list was reviewed for secrets
+  and generated output. Local environment files and beta ZIPs remain ignored.
+- Follow-up: automated tests use synthetic text and fake providers/speech.
+  Live model quality, device voice playback, real-site behavior, and hosted
+  release packaging remain separate verification tasks; public-release work
+  listed below remains open.
+- Commit: this record is included in the current-state snapshot commit; use
+  `git log --oneline -- docs/status.md` to find its hash.
+
 ## Implemented
 
+- Local pronunciation: one sound icon beside Original and Translation reads that
+  area's selected text, or its full passage when nothing is selected. The same
+  icon becomes Stop. Original language is detected locally by Chrome with a
+  bounded deadline; translation uses the target language. Only local device voices
+  are used; unsupported languages show a message without remote fallback. See
+  [ADR-0010](decisions/0010-selection-sound-controls.md).
+
+- Selected-page-text reading translation with a remembered target language and
+  a panel displaying both original text and translation without Copy, Replace, or
+  Undo; see [ADR-0005](decisions/0005-selected-text-translation.md) and its panel
+  refinement in [ADR-0010](decisions/0010-selection-sound-controls.md).
 - Chrome Manifest V3 extension invoked from toolbar, context menu, or shortcut.
 - Complete-field capture for supported inputs, textareas, and basic
   contenteditable editors, with sensitive-field exclusions and formatting warning.
+- Open shadow-root editors use host-aware availability checks and input events;
+  managed-editor replacement and undo resolve focus through nested open shadow roots.
 - Native plain-text replacement and undo for managed contenteditable editors
   with Lexical/Draft markers; see [ADR-0003](decisions/0003-managed-editor-native-insertion.md).
 - Fix grammar and Improve writing modes; Natural or Formal style for Improve
@@ -28,6 +61,116 @@ the [architecture overview](architecture/README.md) describes the current code.
   20-case synthetic evaluation corpus with an opt-in live runner.
 
 ## Verification
+
+Later on 2026-10-03, missing-voice messages gained language-specific installation
+guidance and a Windows speech-settings link; see
+[ADR-0012](decisions/0012-missing-voice-installation-guidance.md). A new sound click
+queries available voices again; successful playback and capture cleanup hide the
+guidance. `npm run format` and `npm run check` passed: formatting, lint, type checks,
+212 Vitest tests across 15 files, all workspace builds, and 21 Chromium workflows.
+OS settings launch, actual voice downloads, and Chrome's exposure of installed
+voices require manual verification. The extension does not install OS packages.
+
+Later on 2026-10-03, first-opening translation now waits for the authenticated
+reading connection and resumes when the panel becomes visible, using the default
+or saved language without a dropdown change; see
+[ADR-0011](decisions/0011-initial-reading-readiness.md). Existing consent and
+one-attempt rules remain in place. Spoken selections keep their native highlight
+after playback finishes or stops, until another click or leaving the panel.
+Replacing the selected text clears it; a translation arriving preserves an
+unchanged Original selection. `npm run format` and `npm run check` passed:
+formatting, lint, all type checks, 211 Vitest tests across 15 files, all workspace
+builds, and 21 Chromium workflows. Coverage includes delayed/current connection
+acknowledgement, first reveal with default and saved languages, no automatic
+retry after failure, and selection retention and clearing. The selected-text
+screenshot was visually checked. Browser workflows simulate panel visibility
+and speech; native sidebar opening and audible device voices remain manual checks.
+
+Later on 2026-10-03, the reading layout was compacted to 14px text and Original
+was collapsed by default. Its keyboard-accessible heading toggle expands/collapses
+the text; generation updates preserve expansion and new captures reset it.
+Writing mode continues to show its original directly. `npm run format` and
+`npm run check` passed: formatting, lint, all type checks, 202 Vitest tests across
+15 files, all workspace builds, and 19 Chromium workflows. Coverage includes
+collapse defaults, expansion retention/reset, source-selection and speech cleanup
+on collapse, keyboard toggling, viewport fit, and 14px computed text sizes.
+Collapsed and expanded screenshots at 320 by 600 and the 400 by 800 layout were
+visually checked. Translation uses the freed space and text areas scroll internally.
+
+Later on 2026-10-03, pronunciation was simplified to selectable Original and
+Translation text areas with one sound/stop icon each; see
+[ADR-0010](decisions/0010-selection-sound-controls.md), which supersedes ADR-0009.
+`npm run format` and the final `npm run check` passed: formatting, lint, all
+workspace/test type checks, 200 Vitest tests across 15 files, all workspace builds,
+and 19 Chromium workflows. Coverage includes selected/full text playback on both
+icons, keyboard activation, selection preserved after icon focus, local source
+language detection, detection timeout/unknown language, superseded detection,
+playback switching/cancellation, lifecycle/consent/expiry cleanup, generic detected
+language voice matching, and oversized-passage errors. Screenshots at 400 by 800
+and 320 by 600 were visually checked; both text areas scroll internally and the
+panel fits the viewport. Browser speech and source-language detection are faked in
+the workflow tests: audible output, real installed voices, and actual detection
+quality still need manual Chrome verification. No permissions, dependencies,
+microphone access, remote speech service, or additional model/API calls were added.
+
+On 2026-10-03, local pronunciation was added; see
+[ADR-0009](decisions/0009-local-pronunciation.md). `npm run format` and the final
+`npm run check` passed: formatting, lint, all workspace/test type checks,
+193 Vitest tests across 15 files, all workspace builds, and 19 Chromium workflow
+tests. Coverage includes local-only language matching, missing and late-loading
+voices, word segmentation, safe text rendering, keyboard navigation/activation,
+source-language selection without another API call, cancellation, stale callbacks,
+errors, timeout, consent withdrawal, capture expiry, and panel hide/close.
+Screenshots at 400 by 800 and 320 by 600 were visually checked, including long
+translations and expanded original-selection controls. Browser speech is faked:
+audible playback, installed local voices, and language quality need manual Chrome
+verification. No microphone, new permission/dependency, or remote speech service
+was added. Existing unrelated working-tree changes were preserved.
+
+On 2026-10-03, active reading was added: a visible, consented panel translates
+new settled selections on the invoked page and stops when hidden or closed;
+see [ADR-0008](decisions/0008-active-reading.md). `npm run format` and
+`npm run check` passed: formatting, lint, type checks, 173 Vitest tests across
+14 files, all workspace builds, and 18 Chromium workflow tests. Coverage includes
+panel lifecycle, consent, tab-switch races, duplicate selections, pointer release,
+and writing-field exclusions. The browser fixture simulates sidebar visibility;
+native Chrome sidebar gestures and live provider quality remain manual checks.
+
+On 2026-10-03 the Translate button was removed from reading mode. Opening a
+selection and changing the target language now request translation after consent;
+see [ADR-0007](decisions/0007-language-change-translation.md). `npm run check`
+passed with 158 Vitest tests, all builds, and 17 Chromium tests. A CSS selector
+ordering warning was corrected and `npm run format` / `npm run lint` then passed
+without warnings. Coverage includes coalescing rapid language changes, discarding
+obsolete results, saved preferences, consent, button visibility, and expanded
+result layout. The resulting panel screenshot was visually checked.
+
+The translation result layout was then expanded to fill the available sidebar
+height, with compact controls on one row and internal scrolling for long text.
+`npm run format` and the final `npm run check` passed: formatting, lint, type
+checks, 156 Vitest tests, all builds, and 17 Chromium workflow tests. The added
+layout test verifies long output at 400×800 and 320×600 without page scrolling;
+screenshots at both sizes were visually checked.
+
+Later on 2026-10-03, Vietnamese was added as the default translation language
+and the selection context menu was changed to translate immediately after
+consent; see [ADR-0006](decisions/0006-immediate-context-menu-translation.md).
+The final `npm run check` passed: formatting, lint, type checks, 156 Vitest tests
+across 13 files, all workspace builds, and 16 Chromium workflow tests. Coverage
+includes saved preferences, early consent acceptance, context-frame targeting,
+consecutive immediate translations, and no automatic retry on panel reopening
+or failure. The local API health check also returned `status: ok`; it does not
+establish live provider quality. Native context-menu gestures on real websites
+still require manual verification.
+
+On 2026-10-03, after adding selected-text translation, `npm run format` and
+`npm run check` passed locally: formatting, lint, workspace/test type checks,
+150 Vitest tests across 13 files, all workspace builds, and 15 Chromium workflow
+tests. The translation panel was visually checked at 400px width. A read-only
+review identified a saved-language initialization race; it was fixed and covered
+for both early capture and an intervening user language choice before the final
+gate. Tests use synthetic text and fake providers; real-site toolbar/right-click
+gestures and live translation quality remain unverified.
 
 On 2026-09-06, after the writing-mode simplification and Node.js 24.19.0
 runtime update, `npm run check` passed locally:

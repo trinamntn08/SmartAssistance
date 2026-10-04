@@ -11,7 +11,10 @@ import {
 } from "@smartassistance/contracts";
 
 export const SNAPSHOT_TTL_MS = 10 * 60_000;
-export const PRIVACY_NOTICE_VERSION = "2026-09-05.1";
+export const PRIVACY_NOTICE_VERSION = "2026-10-03.4";
+export const READING_PORT_NAME = "active-reading";
+export const READING_READY_MESSAGE = "READING_READY";
+export const TRANSLATION_LANGUAGE_KEY = "translationLanguage";
 export const PRIVACY_CONSENT_KEY = "privacyConsent";
 export const ACTIVE_DRAFT_STORAGE_KEY = "activeDraftState";
 export const AUTH_TOKEN_STORAGE_KEY = "applicationAccessToken";
@@ -26,6 +29,8 @@ export interface EditorDraft {
 export type InteractionPhase = "captured" | "generating" | "preview" | "applied";
 export interface ReadyDraftState {
   status: "ready";
+  source?: "selection";
+  autoTranslate?: true;
   draft: EditorDraft;
   tabId: number;
   documentId: string;
@@ -39,11 +44,14 @@ export type ActiveDraftState =
 
 export type ContentScriptRequest =
   | { type: "CAPTURE_FOCUSED_EDITOR" }
+  | { type: "CAPTURE_SELECTION" }
+  | { type: "CAPTURE_SETTLED_SELECTION" }
   | { type: "CLEAR_SNAPSHOT"; snapshotId: string }
   | { type: "APPLY_REWRITE"; snapshotId: string; text: string }
   | { type: "UNDO_REWRITE"; snapshotId: string };
 export type ContentScriptResponse =
   | { ok: true; draft: EditorDraft }
+  | { ok: true; empty: true }
   | { ok: true; applied: true }
   | { ok: true; undone: true }
   | { ok: true; cleared: true }
@@ -51,6 +59,9 @@ export type ContentScriptResponse =
 
 export type ExtensionRequest =
   | { type: "CAPTURE_ACTIVE_EDITOR" }
+  | { type: "CAPTURE_ACTIVE_TEXT" }
+  | { type: "CAPTURE_ACTIVE_SELECTION" }
+  | { type: "READ_SELECTION" }
   | { type: "ACCEPT_PRIVACY_NOTICE" }
   | { type: "CLEAR_PRIVATE_DATA" }
   | { type: "CANCEL_REWRITE"; snapshotId: string; generationId: string }
@@ -63,6 +74,7 @@ export type ExtensionRequest =
   | { type: "APPLY_ACTIVE_REWRITE"; snapshotId: string; generationId: string; text: string }
   | { type: "UNDO_ACTIVE_REWRITE"; snapshotId: string; generationId: string };
 export type ExtensionResponse =
+  | { ok: true; unchanged: true }
   | { ok: true; captured: true }
   | { ok: true; consented: true }
   | { ok: true; cleared: true }
@@ -105,20 +117,44 @@ export function isActiveDraftState(value: unknown): value is ActiveDraftState {
     hasOnlyKeys(
       value,
       captured
-        ? ["status", "draft", "tabId", "documentId", "phase"]
-        : ["status", "draft", "tabId", "documentId", "phase", "generationId"],
+        ? [
+            "status",
+            "draft",
+            "tabId",
+            "documentId",
+            "phase",
+            ...(value.source === "selection" ? ["source"] : []),
+            ...(value.autoTranslate === true ? ["autoTranslate"] : []),
+          ]
+        : [
+            "status",
+            "draft",
+            "tabId",
+            "documentId",
+            "phase",
+            "generationId",
+            ...(value.source === "selection" ? ["source"] : []),
+          ],
     ) &&
     isEditorDraft(value.draft) &&
     Number.isInteger(value.tabId) &&
     (value.tabId as number) >= 0 &&
     isIdentifier(value.documentId) &&
     ["captured", "generating", "preview", "applied"].includes(value.phase as string) &&
+    !(value.source === "selection" && value.phase === "applied") &&
+    (value.autoTranslate === undefined ||
+      (value.autoTranslate === true && value.source === "selection" && captured)) &&
     (captured ? value.generationId === undefined : isIdentifier(value.generationId))
   );
 }
 export function isContentScriptRequest(value: unknown): value is ContentScriptRequest {
   if (!isRecord(value)) return false;
-  if (value.type === "CAPTURE_FOCUSED_EDITOR") return hasOnlyKeys(value, ["type"]);
+  if (
+    ["CAPTURE_FOCUSED_EDITOR", "CAPTURE_SELECTION", "CAPTURE_SETTLED_SELECTION"].includes(
+      value.type as string,
+    )
+  )
+    return hasOnlyKeys(value, ["type"]);
   if (!isIdentifier(value.snapshotId)) return false;
   return (
     ((value.type === "CLEAR_SNAPSHOT" || value.type === "UNDO_REWRITE") &&
@@ -140,6 +176,7 @@ export function isContentScriptResponse(value: unknown): value is ContentScriptR
   return (
     isEditorDraft(value.draft) ||
     value.applied === true ||
+    value.empty === true ||
     value.undone === true ||
     value.cleared === true
   );
@@ -147,9 +184,14 @@ export function isContentScriptResponse(value: unknown): value is ContentScriptR
 export function isExtensionRequest(value: unknown): value is ExtensionRequest {
   if (!isRecord(value)) return false;
   if (
-    ["CAPTURE_ACTIVE_EDITOR", "ACCEPT_PRIVACY_NOTICE", "CLEAR_PRIVATE_DATA"].includes(
-      value.type as string,
-    )
+    [
+      "CAPTURE_ACTIVE_EDITOR",
+      "CAPTURE_ACTIVE_TEXT",
+      "CAPTURE_ACTIVE_SELECTION",
+      "READ_SELECTION",
+      "ACCEPT_PRIVACY_NOTICE",
+      "CLEAR_PRIVATE_DATA",
+    ].includes(value.type as string)
   )
     return hasOnlyKeys(value, ["type"]);
   if (!isIdentifier(value.snapshotId) || !isIdentifier(value.generationId)) return false;
@@ -184,7 +226,7 @@ export function isExtensionResponse(value: unknown): value is ExtensionResponse 
       isIdentifier(value.snapshotId) &&
       isIdentifier(value.generationId)
     );
-  return ["captured", "consented", "cleared", "cancelled", "applied", "undone"].some(
+  return ["captured", "consented", "cleared", "cancelled", "applied", "undone", "unchanged"].some(
     (key) => value[key] === true && hasOnlyKeys(value, ["ok", key]),
   );
 }

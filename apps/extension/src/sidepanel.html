@@ -10,34 +10,47 @@
     <main>
       <header>
         <div>
-          <p class="eyebrow">Writing assistant</p>
+          <p id="feature-label" class="eyebrow">Writing assistant</p>
           <h1>SmartAssistance</h1>
         </div>
         <button id="recapture" class="secondary compact" type="button">Recapture</button>
       </header>
 
       <p id="status" class="status" role="status" aria-live="polite">
-        Focus an editor, then use the extension action.
+        Select page text or focus a writing field, then click the extension.
       </p>
 
       <section id="privacy-notice" aria-labelledby="privacy-title">
-        <h2 id="privacy-title">Before you send a draft</h2>
-        <p>Generate sends only the captured field and your rewrite settings to the SmartAssistance API and OpenAI. Surrounding page content is not sent.</p>
+        <h2 id="privacy-title">Before you send text</h2>
+        <p>Opening a selected passage with the extension or choosing Translate with SmartAssistance from the right-click menu sends your selected text and saved target language to the SmartAssistance API and OpenAI after consent. Changing the translation language sends the same selected text for a new translation. Generate sends the captured writing field and rewrite settings. Surrounding page content is not sent.</p>
+        <p>While this panel is visible, selecting a new passage on the page where you opened the extension automatically translates it after a brief pause. Closing or hiding the panel stops active reading. Writing fields are not monitored.</p>
         <p>The app does not save draft history. Captured text is temporary and expires after ten minutes. It is cleared when you recapture, navigate, close the source tab, or choose Clear text and consent.</p>
         <p>OpenAI retention depends on the provider account and model settings. Disabling response storage does not guarantee zero provider retention.</p>
         <a href="https://developers.openai.com/api/docs/guides/your-data" target="_blank" rel="noreferrer">OpenAI data controls</a>
-        <button id="accept-privacy" class="primary" type="button">I agree to send drafts when I choose Generate</button>
+        <button id="accept-privacy" class="primary" type="button">I agree to send text for translation or writing</button>
       </section>
 
       <section id="workspace" hidden>
-        <label for="original">Original</label>
-        <textarea id="original" dir="auto" readonly></textarea>
+        <div id="original-section">
+          <div class="text-heading">
+            <label id="original-label" for="original">Original</label>
+            <button id="original-toggle" class="original-toggle" type="button" aria-controls="original" aria-expanded="false" aria-label="Show original text" hidden>
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m4 2 4 4-4 4"/></svg>
+              Original
+            </button>
+            <button id="original-sound" class="sound-button secondary" type="button" aria-label="Listen to original" title="Listen to original (selected text or full passage)" hidden>
+              <svg class="speaker-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M15 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"/></svg>
+              <svg class="stop-icon" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+            </button>
+          </div>
+          <textarea id="original" dir="auto" aria-label="Original" readonly></textarea>
+        </div>
         <p id="rich-text-warning" class="notice" hidden>
           Replacing this rich-text field will use plain text.
         </p>
 
         <div class="options">
-          <label>
+          <label id="mode-option">
             Mode
             <select id="operation">
               <option value="grammar">Fix grammar</option>
@@ -52,9 +65,10 @@
             </select>
           </label>
           <label>
-            Output language
+            <span id="language-label">Output language</span>
             <select id="language">
               <option value="same">Same as input</option>
+              <option value="vi">Vietnamese</option>
               <option value="en">English</option>
               <option value="fr">French</option>
               <option value="es">Spanish</option>
@@ -72,12 +86,24 @@
         <button id="cancel" class="secondary" type="button" hidden>Cancel rewrite</button>
 
         <div id="result" hidden>
-          <label for="preview">Preview</label>
+          <div class="text-heading">
+            <label id="preview-label" for="preview">Preview</label>
+            <button id="translation-sound" class="sound-button secondary" type="button" aria-label="Listen to translation" title="Listen to translation (selected text or full passage)" hidden>
+              <svg class="speaker-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M15 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"/></svg>
+              <svg class="stop-icon" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+            </button>
+          </div>
           <textarea id="preview" dir="auto"></textarea>
           <div class="actions">
             <button id="replace" class="primary" type="button">Replace field</button>
             <button id="copy" class="secondary" type="button">Copy</button>
           </div>
+        </div>
+        <p id="speech-status" class="notice" role="status" aria-live="polite" hidden></p>
+        <div id="voice-install" class="notice" hidden>
+          <p id="voice-install-instructions"></p>
+          <a id="voice-settings" href="ms-settings:speech" hidden>Open speech settings</a>
+          <a id="voice-install-help" href="https://support.microsoft.com/en-us/accessibility/windows/narrator/appendix-a-supported-languages-and-voices" target="_blank" rel="noreferrer">Installation guide</a>
         </div>
         <button id="undo" class="secondary" type="button" hidden disabled>
           Undo last replacement
@@ -85,7 +111,7 @@
       </section>
 
       <footer>
-        Your draft is sent only when you choose Generate. There is no saved draft history.
+        Translation sends only your selected text when you open it or change language. Generate sends your writing field. There is no saved text history.
         <button id="clear-private-data" class="secondary" type="button">Clear text and consent</button>
       </footer>
     </main>

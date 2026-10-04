@@ -3,6 +3,24 @@ import { describe, expect, it } from "vitest";
 import { MAX_REWRITE_CHARACTERS, isRewriteResponse, parseRewriteRequest } from "./index.js";
 
 describe("parseRewriteRequest", () => {
+  it("accepts explicit translation without style", () => {
+    expect(
+      parseRewriteRequest({ text: "Bonjour", operation: "translate", targetLanguage: "en" }),
+    ).toEqual({
+      success: true,
+      value: { text: "Bonjour", operation: "translate", targetLanguage: "en" },
+    });
+  });
+  it.each([
+    { targetLanguage: "same" },
+    { targetLanguage: "en", tone: "natural" },
+    { targetLanguage: "en", tone: "invented" },
+    { targetLanguage: "" },
+  ])("rejects invalid translation settings %o", (settings) => {
+    expect(
+      parseRewriteRequest({ text: "Bonjour", operation: "translate", ...settings }).success,
+    ).toBe(false);
+  });
   it("accepts a valid same-language rewrite", () => {
     const result = parseRewriteRequest({
       text: "pls send it tomorrow",

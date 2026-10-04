@@ -39,6 +39,22 @@ describe("editor integration", () => {
     expect(textarea.value).toBe("hello there");
   });
 
+  it("captures an editor focused inside an open shadow root", () => {
+    const host = document.createElement("div");
+    const shadow = host.attachShadow({ mode: "open" });
+    const editor = document.createElement("div");
+    editor.setAttribute("contenteditable", "true");
+    editor.textContent = "Shadow-root email draft";
+    shadow.append(editor);
+    document.body.append(host);
+    editor.focus();
+
+    expect(captureFocusedEditor()).toMatchObject({
+      ok: true,
+      draft: { text: "Shadow-root email draft" },
+    });
+  });
+
   it("does not overwrite a draft that changed after capture", async () => {
     const input = document.createElement("input");
     input.type = "text";
@@ -57,6 +73,43 @@ describe("editor integration", () => {
       ok: false,
     });
     expect(input.value).toBe("user kept typing");
+  });
+
+  it.each([
+    ["hidden", ""],
+    ["inert", ""],
+    ["aria-hidden", "true"],
+    ["aria-disabled", "true"],
+    ["aria-readonly", "true"],
+    ["style", "display: none"],
+  ])("checks shadow ancestors for %s at capture, replacement, and undo", async (name, value) => {
+    const host = document.createElement("div");
+    const nestedHost = document.createElement("div");
+    host.attachShadow({ mode: "open" }).append(nestedHost);
+    const editor = document.createElement("textarea");
+    editor.value = "original";
+    nestedHost.attachShadow({ mode: "open" }).append(editor);
+    document.body.append(host);
+    editor.focus();
+    const captured = captureFocusedEditor();
+    if (!captured.ok || !("draft" in captured)) throw new Error("No capture");
+    host.setAttribute(name, value);
+    expect(await applyRewrite(captured.draft.snapshotId, "replacement")).toMatchObject({
+      ok: false,
+      code: "CONFLICT",
+    });
+    expect(editor.value).toBe("original");
+    host.removeAttribute(name);
+    expect(await applyRewrite(captured.draft.snapshotId, "replacement")).toMatchObject({
+      ok: true,
+    });
+    host.setAttribute(name, value);
+    expect(await undoRewrite(captured.draft.snapshotId)).toMatchObject({
+      ok: false,
+      code: "CONFLICT",
+    });
+    expect(editor.value).toBe("replacement");
+    expect(captureFocusedEditor()).toMatchObject({ ok: false });
   });
 
   it("rejects password fields", async () => {

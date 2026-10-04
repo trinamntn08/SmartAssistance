@@ -1,5 +1,7 @@
 import { applyRewrite, captureFocusedEditor, clearEditorSnapshot, undoRewrite } from "./editor.js";
 import { isContentScriptRequest } from "./messages.js";
+import { captureSelection } from "./selection.js";
+import { createSettledSelectionReader } from "./settled-selection.js";
 
 interface SmartAssistanceWindow extends Window {
   __smartAssistanceContentScriptLoaded?: boolean;
@@ -16,7 +18,11 @@ function mutationFailed() {
 }
 if (!smartWindow.__smartAssistanceContentScriptLoaded) {
   smartWindow.__smartAssistanceContentScriptLoaded = true;
-  window.addEventListener("pagehide", () => clearEditorSnapshot());
+  const reader = createSettledSelectionReader();
+  window.addEventListener("pagehide", (event) => {
+    clearEditorSnapshot();
+    if (!event.persisted) reader.dispose();
+  });
   chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
     if (
       sender.id !== chrome.runtime.id ||
@@ -27,6 +33,12 @@ if (!smartWindow.__smartAssistanceContentScriptLoaded) {
       return;
     }
     switch (message.type) {
+      case "CAPTURE_SETTLED_SELECTION":
+        sendResponse(reader.capture());
+        break;
+      case "CAPTURE_SELECTION":
+        sendResponse(captureSelection());
+        break;
       case "CAPTURE_FOCUSED_EDITOR":
         sendResponse(captureFocusedEditor());
         break;

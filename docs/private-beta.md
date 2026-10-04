@@ -46,6 +46,55 @@ request after inactivity.
 
 ## 3. Build and upload the initial private extension
 
+### Automated release command
+
+After the first beta package exists, prepare every later Chrome Web Store update
+from the repository root with one command:
+
+```powershell
+npm run release:extension
+```
+
+The command:
+
+1. increments the final component of the extension version;
+2. synchronizes `manifest.json`, the extension workspace package, and the lockfile;
+3. runs the complete `npm run check` gate using the local test configuration;
+4. rebuilds only the extension with the hosted API URL and beta token;
+5. replaces `smartassistance-beta.zip`; and
+6. verifies the ZIP version, root layout, HTTPS API origin, absence of the local
+   API address, and reports its SHA-256 hash.
+
+By default, it recovers the hosted URL and shared beta token from the previous
+beta ZIP without printing them. This keeps the update workflow to one command
+while the shared-token beta design remains in use. Keep the previous ZIP locally
+and never commit it.
+
+As a more explicit alternative, copy `.env.release.example` to the ignored local
+file `.env.release.local`, replace both placeholders, and keep that file private:
+
+```powershell
+Copy-Item .env.release.example .env.release.local
+```
+
+Process environment variables take precedence over `.env.release.local`; the
+previous ZIP is used only when either required value is still missing. To choose
+a specific higher version instead of the automatic patch increment, run:
+
+```powershell
+npm run release:extension -- -Version 0.2.0
+```
+
+If validation or packaging fails, the command restores the three version files
+to their starting contents and preserves the previous ZIP. It never
+uploads or submits the ZIP; those external dashboard actions remain explicit.
+
+For future assisted releases, ask: **“Prepare the next Chrome Web Store
+extension release.”** The agent should run `npm run release:extension`, inspect
+the reported version and hash, and hand off `smartassistance-beta.zip` for upload.
+
+### Manual initial build
+
 In PowerShell, use the Render URL and exactly the same beta token that is stored
 in Render. Do not commit either value.
 
@@ -59,6 +108,25 @@ Compress-Archive -Path apps/extension/dist/* -DestinationPath smartassistance-be
 In the Chrome Web Store Developer Dashboard, upload `smartassistance-beta.zip`
 as a new item. Complete the listing and privacy disclosures, label it as a beta,
 and set distribution to **Private**. Save the item and copy its extension ID.
+
+## Store images
+
+The Store requires a 128x128 PNG extension icon, a 440x280 promotional image,
+and at least one 1280x800 screenshot. The build includes the extension icon;
+the Store listing can upload `apps/extension/assets/promo-440x280.png`. Generate
+the screenshot with the release handoff command below. It uses the tested side
+panel and synthetic text; do not create Store screenshots from a real user's
+draft.
+
+The committed `apps/extension/assets/store-screenshot.png` is ready to upload.
+To regenerate it after a UI change, first create the default local build, then
+run:
+
+```powershell
+$env:SMARTASSISTANCE_CAPTURE_STORE_SCREENSHOT = "1"
+npx playwright test tests/browser/extension.spec.ts --grep '#draft'
+Remove-Item Env:SMARTASSISTANCE_CAPTURE_STORE_SCREENSHOT
+```
 
 Chrome assigns a stable extension ID to the Store item. Private distribution
 limits installation to named testers; it does not keep the shared token secret.

@@ -1,4 +1,4 @@
-import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -44,6 +44,9 @@ async function copyStaticFiles() {
       join(applicationDirectory, "src", "sidepanel.html"),
       join(distributionDirectory, "sidepanel.html"),
     ),
+    cp(join(applicationDirectory, "assets"), join(distributionDirectory, "assets"), {
+      recursive: true,
+    }),
   ]);
 }
 

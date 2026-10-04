@@ -2,10 +2,25 @@
 
 ## What leaves the browser
 
-Capture reads only the complete focused eligible editor after a user invocation.
-It does not submit a request. First use requires acceptance of the disclosure;
+Capture reads only explicitly selected visible page text for translation, or the
+complete focused eligible editor for writing, after a user invocation.
+Writing-field capture does not submit a request. First use requires acceptance of the disclosure;
 Generate then sends the captured text, writing mode, applicable improvement
-style, and target language to the configured SmartAssistance API and OpenAI. No
+style, and target language to the configured SmartAssistance API and OpenAI.
+Reading translation sends only the captured selection and target language. Choosing
+**Translate with SmartAssistance** in the right-click menu sends that selection
+immediately after consent, using the saved language or Vietnamese by default.
+Opening selected text with the toolbar also translates immediately. Changing
+the translation language requests a new translation of that same selection.
+Before consent, the panel waits; accepting consent starts that pending translation.
+While the panel is visible and consented, it checks for settled page selections
+on the explicitly invoked active tab every 700ms. A new passage is captured and
+translated automatically. Repeated text is ignored; mouse dragging and rapid
+selection changes wait until the selection is finished and stable. Writing fields
+are excluded from active reading. Hiding or closing the panel ends the reading
+connection and stops polling; the last reader disconnect also cancels a pending
+selection translation. Navigation requires a new invocation on the page.
+No
 surrounding page, thread, URL,
 cookies, browsing history, or model API key is sent from the extension.
 
@@ -13,6 +28,20 @@ Replacement always requires a separate user action. Cancel stops waiting and
 aborts the provider request where possible; it cannot retract data already sent.
 
 ## What SmartAssistance retains
+
+The panel displays only the already captured original selection and its current
+translation. Pronunciation is explicitly triggered by either area's sound icon;
+it reads that area's selection or its whole passage when nothing is selected.
+Chrome's built-in language detector processes the full captured original locally
+when its sound icon is used. No source-language service/API request is added.
+Only compatible browser
+voices marked `localService: true` receive text. The extension never selects a
+remote/default fallback voice and makes no additional speech API request. Missing
+local voices produce an explanatory message. Playback uses temporary in-memory
+text, is capped at 60 seconds, and stops on panel hide/close, capture expiry/change,
+translation language/result changes, or consent withdrawal. No microphone access,
+audio files, pronunciation history, or source-language preference is stored.
+Device speech services provide the voices; availability and quality vary.
 
 - Chrome session storage contains one current draft and its interaction metadata.
   Previews live in panel memory; the content script temporarily retains an undo
@@ -24,6 +53,8 @@ aborts the provider request where possible; it cannot retract data already sent.
   shared interaction in other panels.
 - The versioned consent preference is stored locally, scoped to the configured
   API endpoint. Clear text and consent removes it and invalidates the capture.
+- The preferred translation language is stored locally without selected text or
+  translations. Clear text and consent retains this non-content preference.
 - The API has no draft database/cache/history and does not log draft or rewrite
   bodies. Logs contain operational metadata only. SDK logging is disabled.
 - Normal tests use synthetic text and a local fake provider. The separate live

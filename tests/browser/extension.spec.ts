@@ -46,7 +46,7 @@ const test = base.extend<{ app: Harness }>({
       } else {
         response.setHeader("Content-Type", "text/html");
         response.end(
-          '<!doctype html><html><body><textarea id="draft">Original A</textarea><input id="email" type="email" value="before@example.com"><div id="rich" contenteditable="true"><b>Original rich text</b></div><input id="payment" autocomplete="cc-number" value="synthetic"><textarea id="readonly" readonly>private</textarea></body></html>',
+          '<!doctype html><html><body><p id="article">Bonjour Marie, rendez-vous le 12 mai.</p><p>Surrounding page text</p><textarea id="draft">Original A</textarea><input id="email" type="email" value="before@example.com"><div id="rich" contenteditable="true"><b>Original rich text</b></div><input id="payment" autocomplete="cc-number" value="synthetic"><textarea id="readonly" readonly>private</textarea></body></html>',
         );
       }
     });
@@ -77,6 +77,20 @@ const test = base.extend<{ app: Harness }>({
       await editor.goto(url);
       const panel = await context.newPage();
       await panel.goto(`chrome-extension://${extensionId}/sidepanel.html`);
+      // Regular test tabs stand in for a sidebar: focusing panel controls should
+      // leave the underlying webpage active, as it does in Chrome's side panel.
+      await worker.evaluate(async (siteUrl) => {
+        const original = chrome.tabs.query.bind(chrome.tabs);
+        const [source] = await original({ url: `${siteUrl}/*` });
+        Object.defineProperty(chrome.tabs, "query", {
+          value: async (query: chrome.tabs.QueryInfo) => {
+            const tabs = await original(query);
+            if (query.active && tabs[0]?.url === chrome.runtime.getURL("sidepanel.html") && source)
+              return [source];
+            return tabs;
+          },
+        });
+      }, url);
       app = {
         editor,
         panel,
@@ -121,9 +135,384 @@ const test = base.extend<{ app: Harness }>({
 });
 async function accept(app: Harness): Promise<void> {
   await app.panel
-    .getByRole("button", { name: "I agree to send drafts when I choose Generate" })
+    .getByRole("button", { name: "I agree to send text for translation or writing" })
     .click();
 }
+test("selected text shows original and translation without Copy and remembers language", async ({
+  app,
+}, testInfo) => {
+  await app.panel.setViewportSize({ width: 400, height: 800 });
+  await app.editor.bringToFront();
+  await app.editor.locator("#article").evaluate((element) => {
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    window.getSelection()?.removeAllRanges();
+    window.getSelection()?.addRange(range);
+  });
+  expect(await app.send({ type: "CAPTURE_ACTIVE_TEXT" })).toEqual({ ok: true, captured: true });
+  expect(await app.state()).toMatchObject({
+    source: "selection",
+    draft: { text: "Bonjour Marie, rendez-vous le 12 mai." },
+  });
+  expect(app.calls).toBe(0);
+  await expect(app.panel.locator("#original-section")).toBeVisible();
+  await expect(app.panel.locator("#original")).toHaveValue("Bonjour Marie, rendez-vous le 12 mai.");
+  await expect(app.panel.locator("#copy")).toBeHidden();
+  await expect(app.panel.locator("#mode-option")).toBeHidden();
+  await expect(app.panel.locator("#generate")).toBeHidden();
+  await expect(app.panel.locator("#language")).toHaveValue("vi");
+  await accept(app);
+  await expect(app.panel.locator("#preview")).toHaveValue(app.output);
+  app.output = "Hello Marie, see you on May 12.";
+  await app.panel.locator("#language").selectOption("en");
+  await expect(app.panel.locator("#preview")).toHaveValue(app.output);
+  await expect(app.panel.locator("#replace")).toBeHidden();
+  await app.panel.screenshot({ path: testInfo.outputPath("translation-panel.png") });
+  await expect(app.editor.locator("#article")).toHaveText("Bonjour Marie, rendez-vous le 12 mai.");
+  app.output = "Bonjour Marie.";
+  await app.panel.locator("#language").selectOption("fr");
+  await expect(app.panel.locator("#preview")).toHaveValue(app.output);
+  await app.panel.reload();
+  await expect(app.panel.locator("#language")).toHaveValue("fr");
+  await expect(app.panel.locator("#original-section")).toBeVisible();
+  await expect(app.panel.locator("#copy")).toBeHidden();
+});
+test("translation fills the sidebar and adapts to window height without page scrolling", async ({
+  app,
+}, testInfo) => {
+  await app.panel.setViewportSize({ width: 400, height: 800 });
+  await app.editor.bringToFront();
+  await app.editor.locator("#article").evaluate((element) => {
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    window.getSelection()?.removeAllRanges();
+    window.getSelection()?.addRange(range);
+  });
+  await app.send({ type: "CAPTURE_ACTIVE_TEXT" });
+  app.output = Array.from(
+    { length: 80 },
+    (_, index) => `Đoạn ${index + 1}: Đây là nội dung dịch dài để kiểm tra vùng đọc.`,
+  ).join("\n\n");
+  await accept(app);
+  await expect(app.panel.locator("#preview")).toHaveValue(app.output);
+  await expect(app.panel.locator("#original")).toBeHidden();
+  await expect(app.panel.locator("#original-toggle")).toHaveAttribute("aria-expanded", "false");
+  expect(
+    await app.panel.locator("#preview").evaluate((field) => getComputedStyle(field).fontSize),
+  ).toBe("14px");
+  const largeBox = await app.panel.locator("#preview").boundingBox();
+  const largeOriginal = await app.panel.locator("#original").boundingBox();
+  expect((largeBox?.height ?? 0) + (largeOriginal?.height ?? 0)).toBeGreaterThan(440);
+  expect(
+    await app.panel.evaluate(() => document.documentElement.scrollHeight <= window.innerHeight),
+  ).toBe(true);
+  await app.panel.screenshot({ path: testInfo.outputPath("translation-expanded.png") });
+  await app.panel.setViewportSize({ width: 320, height: 600 });
+  const smallerBox = await app.panel.locator("#preview").boundingBox();
+  const smallerOriginal = await app.panel.locator("#original").boundingBox();
+  expect((smallerBox?.height ?? 0) + (smallerOriginal?.height ?? 0)).toBeGreaterThan(220);
+  expect(smallerBox?.height).toBeLessThan(largeBox?.height ?? 0);
+  expect(
+    await app.panel.evaluate(() => document.documentElement.scrollHeight <= window.innerHeight),
+  ).toBe(true);
+  await app.panel.screenshot({ path: testInfo.outputPath("translation-expanded-narrow.png") });
+  await app.panel.getByRole("button", { name: "Show original text", exact: true }).press("Space");
+  await expect(app.panel.locator("#original")).toBeVisible();
+  await expect(app.panel.locator("#original")).toHaveAccessibleName("Original");
+  const expandedBox = await app.panel.locator("#preview").boundingBox();
+  expect(expandedBox?.height).toBeLessThan(smallerBox?.height ?? 0);
+  expect(
+    await app.panel.locator("#original").evaluate((field) => getComputedStyle(field).fontSize),
+  ).toBe("14px");
+  expect(
+    await app.panel.evaluate(() => document.documentElement.scrollHeight <= window.innerHeight),
+  ).toBe(true);
+  await app.panel.screenshot({ path: testInfo.outputPath("original-open-narrow.png") });
+  await app.panel.getByRole("button", { name: "Hide original text", exact: true }).press("Enter");
+  await expect(app.panel.locator("#original")).toBeHidden();
+});
+
+for (const target of ["vi", "fr"]) {
+  test(`first panel reveal automatically translates using ${target}`, async ({ app }) => {
+    await app.panel.evaluate(async (saved) => {
+      if (saved !== "vi") await chrome.storage.local.set({ translationLanguage: saved });
+    }, target);
+    await app.panel.addInitScript(() => {
+      let visible = false;
+      Object.defineProperty(document, "visibilityState", {
+        configurable: true,
+        get: () => (visible ? "visible" : "hidden"),
+      });
+      Reflect.set(window, "showTestPanel", () => {
+        visible = true;
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+    });
+    await app.panel.reload();
+    await app.send({ type: "ACCEPT_PRIVACY_NOTICE" });
+    await app.editor.bringToFront();
+    await app.editor.locator("#article").evaluate((element) => {
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      window.getSelection()?.removeAllRanges();
+      window.getSelection()?.addRange(range);
+    });
+    await app.send({ type: "CAPTURE_ACTIVE_TEXT" });
+    await expect(app.panel.locator("#original")).toHaveValue(
+      "Bonjour Marie, rendez-vous le 12 mai.",
+    );
+    await expect(app.panel.locator("#language")).toHaveValue(target);
+    expect(app.calls).toBe(0);
+    // Revealing a real sidebar leaves the selected webpage as the active tab.
+    await app.panel.evaluate(() => Reflect.get(window, "showTestPanel")());
+    await expect(app.panel.locator("#preview")).toHaveValue(app.output);
+    expect(app.calls).toBe(1);
+    await app.panel.evaluate(() => Reflect.get(window, "showTestPanel")());
+    await app.panel.reload();
+    await app.panel.evaluate(() => Reflect.get(window, "showTestPanel")());
+    await expect(app.panel.locator("#language")).toHaveValue(target);
+    expect(app.calls).toBe(1);
+  });
+}
+
+test("sound icons read selected or full original and translated text", async ({
+  app,
+}, testInfo) => {
+  await app.panel.addInitScript(() => {
+    const state = {
+      calls: [] as { text: string; lang: string; local: boolean }[],
+      cancels: 0,
+      available: true,
+    };
+    Reflect.set(window, "testSpeech", state);
+    Object.defineProperty(window, "speechSynthesis", {
+      value: {
+        getVoices: () =>
+          state.available
+            ? [
+                { lang: "vi-VN", localService: true },
+                { lang: "fr-FR", localService: true },
+              ]
+            : [{ lang: "vi-VN", localService: false }],
+        speak: (utterance: SpeechSynthesisUtterance) =>
+          state.calls.push({
+            text: utterance.text,
+            lang: utterance.lang,
+            local: utterance.voice?.localService === true,
+          }),
+        cancel: () => {
+          state.cancels += 1;
+        },
+      },
+    });
+    Object.defineProperty(window, "SpeechSynthesisUtterance", {
+      value: class {
+        text: string;
+        constructor(text: string) {
+          this.text = text;
+        }
+      },
+    });
+    Object.defineProperty(chrome.i18n, "detectLanguage", {
+      value: async () => ({ isReliable: true, languages: [{ language: "fr", percentage: 100 }] }),
+    });
+  });
+  await app.panel.reload();
+  await app.panel.setViewportSize({ width: 400, height: 800 });
+  await app.editor.bringToFront();
+  await app.editor.locator("#article").evaluate((element) => {
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    window.getSelection()?.removeAllRanges();
+    window.getSelection()?.addRange(range);
+  });
+  app.output = "Bonjour, Marie.\nEncore.";
+  await app.send({ type: "CAPTURE_ACTIVE_TEXT" });
+  await accept(app);
+  await expect(app.panel.locator("#original")).toHaveValue("Bonjour Marie, rendez-vous le 12 mai.");
+  await expect(app.panel.locator("#preview")).toHaveValue(app.output);
+  const calls = app.calls;
+  await app.panel.locator("#preview").evaluate((field: HTMLTextAreaElement) => {
+    field.focus();
+    field.setSelectionRange(0, 7);
+  });
+  await app.panel.getByRole("button", { name: "Listen to translation", exact: true }).click();
+  await expect(app.panel.locator("#translation-sound")).toHaveAccessibleName("Stop playback");
+  expect(await app.panel.evaluate(() => Reflect.get(window, "testSpeech").calls)).toEqual([
+    { text: "Bonjour", lang: "vi-VN", local: true },
+  ]);
+  await expect(app.panel.locator("#preview")).toBeFocused();
+  expect(
+    await app.panel
+      .locator("#preview")
+      .evaluate((field: HTMLTextAreaElement) =>
+        field.value.slice(field.selectionStart, field.selectionEnd),
+      ),
+  ).toBe("Bonjour");
+  await app.panel.screenshot({ path: testInfo.outputPath("retained-speech-highlight.png") });
+  await app.panel.locator("#translation-sound").press("Space");
+  await expect(app.panel.locator("#translation-sound")).toHaveAccessibleName(
+    "Listen to translation",
+  );
+  await expect(app.panel.locator("#preview")).toBeFocused();
+  expect(
+    await app.panel
+      .locator("#preview")
+      .evaluate((field: HTMLTextAreaElement) => field.selectionEnd - field.selectionStart),
+  ).toBe(7);
+  await app.panel.locator("#preview-label").click();
+  expect(
+    await app.panel
+      .locator("#preview")
+      .evaluate((field: HTMLTextAreaElement) => field.selectionEnd - field.selectionStart),
+  ).toBe(0);
+  await app.panel
+    .locator("#preview")
+    .evaluate((field: HTMLTextAreaElement) => field.setSelectionRange(0, 0));
+  await app.panel.locator("#translation-sound").press("Enter");
+  expect(await app.panel.evaluate(() => Reflect.get(window, "testSpeech").calls.at(-1).text)).toBe(
+    app.output,
+  );
+  await app.panel.getByRole("button", { name: "Show original text", exact: true }).click();
+  await app.panel.locator("#original").evaluate((field: HTMLTextAreaElement) => {
+    field.focus();
+    field.setSelectionRange(8, 13);
+  });
+  await app.panel.getByRole("button", { name: "Listen to original", exact: true }).click();
+  await expect(app.panel.locator("#original-sound")).toHaveAccessibleName("Stop playback");
+  await expect(app.panel.locator("#original")).toBeFocused();
+  expect(
+    await app.panel
+      .locator("#original")
+      .evaluate((field: HTMLTextAreaElement) =>
+        field.value.slice(field.selectionStart, field.selectionEnd),
+      ),
+  ).toBe("Marie");
+  expect(await app.panel.evaluate(() => Reflect.get(window, "testSpeech").calls.at(-1))).toEqual({
+    text: "Marie",
+    lang: "fr-FR",
+    local: true,
+  });
+  await app.panel.locator("#original-sound").click();
+  await app.panel
+    .locator("#original")
+    .evaluate((field: HTMLTextAreaElement) => field.setSelectionRange(0, 0));
+  await app.panel.locator("#original-sound").click();
+  await expect(app.panel.locator("#original-sound")).toHaveAccessibleName("Stop playback");
+  expect(await app.panel.evaluate(() => Reflect.get(window, "testSpeech").calls.at(-1))).toEqual({
+    text: "Bonjour Marie, rendez-vous le 12 mai.",
+    lang: "fr-FR",
+    local: true,
+  });
+  expect(app.calls).toBe(calls);
+  await app.panel.screenshot({ path: testInfo.outputPath("simple-sound-panel.png") });
+  await app.panel.locator("#original-sound").click();
+  await app.panel.evaluate(() => {
+    Reflect.get(window, "testSpeech").available = false;
+  });
+  await app.panel.locator("#translation-sound").click();
+  await expect(app.panel.locator("#speech-status")).toContainText("No local voice");
+  await expect(app.panel.locator("#voice-install")).toBeVisible();
+  await expect(app.panel.locator("#voice-install-instructions")).toContainText("Vietnamese");
+  await expect(app.panel.locator("#voice-settings")).toHaveAttribute("href", "ms-settings:speech");
+  await app.panel.screenshot({ path: testInfo.outputPath("missing-voice-installation.png") });
+  expect(await app.panel.evaluate(() => Reflect.get(window, "testSpeech").calls.length)).toBe(4);
+  await app.panel.evaluate(() => {
+    Reflect.get(window, "testSpeech").available = true;
+  });
+  await app.panel.locator("#translation-sound").click();
+  await expect(app.panel.locator("#voice-install")).toBeHidden();
+  await app.panel.evaluate(() => {
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" });
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  await expect(app.panel.locator("#translation-sound")).toHaveAccessibleName(
+    "Listen to translation",
+  );
+  expect(await app.panel.evaluate(() => Reflect.get(window, "testSpeech").cancels)).toBeGreaterThan(
+    0,
+  );
+});
+
+test("context-menu translation starts after first consent and later runs immediately", async ({
+  app,
+}) => {
+  async function selectArticle(): Promise<void> {
+    await app.editor.bringToFront();
+    await app.editor.locator("#article").evaluate((element) => {
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      window.getSelection()?.removeAllRanges();
+      window.getSelection()?.addRange(range);
+    });
+  }
+  app.output = "Xin chào Marie, hẹn gặp vào ngày 12 tháng 5.";
+  await selectArticle();
+  expect(await app.send({ type: "CAPTURE_ACTIVE_SELECTION" })).toEqual({
+    ok: true,
+    captured: true,
+  });
+  expect(app.calls).toBe(0);
+  await accept(app);
+  await expect(app.panel.locator("#preview")).toHaveValue(app.output);
+  await expect(app.panel.locator("#language")).toHaveValue("vi");
+  expect(app.calls).toBe(1);
+  app.output = "Bản dịch tiếp theo.";
+  await selectArticle();
+  await app.send({ type: "CAPTURE_ACTIVE_SELECTION" });
+  await expect(app.panel.locator("#preview")).toHaveValue(app.output);
+  expect(app.calls).toBe(2);
+  await app.panel.reload();
+  await expect(app.panel.locator("#generate")).toBeHidden();
+  expect(app.calls).toBe(2);
+  await expect(app.panel.locator("#copy")).toBeHidden();
+});
+test("active reading translates new selections and stops when the panel is hidden or closed", async ({
+  app,
+}) => {
+  // A test tab stands in for Chrome's visible sidebar while the article receives focus.
+  await app.panel.evaluate(() => {
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      get: () => "visible",
+    });
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  async function selectText(text: string): Promise<void> {
+    await app.editor.bringToFront();
+    await app.editor.locator("#article").evaluate((element, value) => {
+      element.textContent = value;
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      window.getSelection()?.removeAllRanges();
+      window.getSelection()?.addRange(range);
+    }, text);
+  }
+  await selectText("Synthetic first passage");
+  await app.send({ type: "CAPTURE_ACTIVE_TEXT" });
+  await accept(app);
+  await expect(app.panel.locator("#preview")).toHaveValue(app.output);
+  app.output = "New reading translation";
+  await selectText("Synthetic next passage");
+  await expect(app.panel.locator("#preview")).toHaveValue(app.output);
+  expect(app.calls).toBe(2);
+  // Explicit polling proves duplicate selections do not request another model call.
+  expect(await app.send({ type: "READ_SELECTION" })).toEqual({ ok: true, unchanged: true });
+  expect(app.calls).toBe(2);
+  await app.panel.evaluate(() => {
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "hidden" });
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  await selectText("Synthetic hidden-panel passage");
+  expect(await app.send({ type: "READ_SELECTION" })).toEqual({ ok: true, unchanged: true });
+  expect(app.calls).toBe(2);
+  await app.panel.close();
+  await selectText("Synthetic closed-panel passage");
+  // Wait beyond two polling intervals to catch unintended background requests.
+  await app.editor.waitForTimeout(1500);
+  expect(await app.state()).toMatchObject({ draft: { text: "Synthetic next passage" } });
+  expect(app.calls).toBe(2);
+});
 for (const [selector, output] of [
   ["#draft", "Rewritten A\nSecond paragraph"],
   ["#email", "after@example.com"],
@@ -145,6 +534,10 @@ for (const [selector, output] of [
     app.output = output;
     await app.panel.locator("#generate").click();
     await expect(app.panel.locator("#preview")).toHaveValue(output);
+    if (process.env.SMARTASSISTANCE_CAPTURE_STORE_SCREENSHOT === "1" && selector === "#draft") {
+      await app.panel.setViewportSize({ width: 1280, height: 800 });
+      await app.panel.screenshot({ path: "apps/extension/assets/store-screenshot.png" });
+    }
     await app.panel.locator("#replace").click();
     await expect(app.panel.locator("#undo")).toBeEnabled();
     expect(
@@ -220,6 +613,68 @@ test("managed editor that restores its own state does not report successful repl
   await expect(app.panel.locator("#status")).toContainText("did not accept");
   expect(await app.editor.locator("#rich").innerText()).toBe("Original rich text");
   await expect(app.panel.locator("#copy")).toBeVisible();
+});
+
+for (const managed of [false, true]) {
+  test(`shadow editor replacement and undo update host state (managed=${managed})`, async ({
+    app,
+  }) => {
+    await app.editor.evaluate((useManaged) => {
+      const host = document.createElement("div");
+      host.id = "shadow-host";
+      const nestedHost = document.createElement("div");
+      host.attachShadow({ mode: "open" }).append(nestedHost);
+      const root = nestedHost.attachShadow({ mode: "open" });
+      root.innerHTML = useManaged
+        ? '<div id="shadow-editor" contenteditable="true" data-lexical-editor="true">Original shadow draft</div>'
+        : '<textarea id="shadow-editor">Original shadow draft</textarea>';
+      const editor = root.querySelector<HTMLElement>("#shadow-editor");
+      if (!editor) throw new Error("Missing shadow editor");
+      host.addEventListener("input", () => {
+        host.dataset.model =
+          editor instanceof HTMLTextAreaElement ? editor.value : editor.innerText;
+      });
+      document.body.append(host);
+    }, managed);
+    expect(await app.capture("#shadow-editor")).toMatchObject({ ok: true });
+    await accept(app);
+    app.output = "<b>Plain shadow text</b>\nSecond line";
+    await app.panel.locator("#generate").click();
+    await expect(app.panel.locator("#preview")).toHaveValue(app.output);
+    await app.panel.locator("#replace").click();
+    await expect(app.panel.locator("#undo")).toBeEnabled();
+    await expect(app.editor.locator("#shadow-host")).toHaveAttribute("data-model", app.output);
+    await app.panel.locator("#undo").click();
+    await expect(app.editor.locator("#shadow-host")).toHaveAttribute(
+      "data-model",
+      "Original shadow draft",
+    );
+  });
+}
+
+test("shadow host restrictions prevent capture and stale replacement", async ({ app }) => {
+  await app.editor.evaluate(() => {
+    const host = document.createElement("div");
+    host.id = "shadow-host";
+    host.attachShadow({ mode: "open" }).innerHTML =
+      '<textarea id="shadow-editor">Original shadow draft</textarea>';
+    host.setAttribute("aria-readonly", "true");
+    document.body.append(host);
+  });
+  expect(await app.capture("#shadow-editor")).toMatchObject({ ok: false });
+  await app.editor
+    .locator("#shadow-host")
+    .evaluate((host) => host.removeAttribute("aria-readonly"));
+  expect(await app.capture("#shadow-editor")).toMatchObject({ ok: true });
+  await accept(app);
+  await app.panel.locator("#generate").click();
+  await expect(app.panel.locator("#preview")).toHaveValue(app.output);
+  await app.editor
+    .locator("#shadow-host")
+    .evaluate((host) => host.setAttribute("aria-disabled", "true"));
+  await app.panel.locator("#replace").click();
+  await expect(app.panel.locator("#status")).toContainText("unavailable");
+  await expect(app.editor.locator("#shadow-editor")).toHaveValue("Original shadow draft");
 });
 
 test("late rewrite cannot be attached to a recaptured draft", async ({ app }) => {

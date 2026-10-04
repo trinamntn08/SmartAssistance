@@ -7,6 +7,29 @@ import {
   isExtensionResponse,
 } from "./messages.js";
 describe("message boundaries", () => {
+  it("validates read-only selection state and exact capture messages", () => {
+    const state = {
+      status: "ready",
+      source: "selection",
+      draft: { richText: false, text: "Bonjour", snapshotId: "s", expiresAt: Date.now() + 60_000 },
+      tabId: 1,
+      documentId: "d",
+      phase: "captured",
+    };
+    expect(isActiveDraftState(state)).toBe(true);
+    expect(isActiveDraftState({ ...state, autoTranslate: true })).toBe(true);
+    expect(isActiveDraftState({ ...state, source: undefined, autoTranslate: true })).toBe(false);
+    expect(
+      isActiveDraftState({ ...state, phase: "generating", generationId: "g", autoTranslate: true }),
+    ).toBe(false);
+    expect(isActiveDraftState({ ...state, autoTranslate: false })).toBe(false);
+    expect(isActiveDraftState({ ...state, source: "page" })).toBe(false);
+    expect(isActiveDraftState({ ...state, phase: "applied", generationId: "g" })).toBe(false);
+    expect(isContentScriptRequest({ type: "CAPTURE_SELECTION" })).toBe(true);
+    expect(isContentScriptRequest({ type: "CAPTURE_SELECTION", text: "injected" })).toBe(false);
+    expect(isExtensionRequest({ type: "CAPTURE_ACTIVE_TEXT" })).toBe(true);
+    expect(isExtensionRequest({ type: "CAPTURE_ACTIVE_SELECTION", text: "injected" })).toBe(false);
+  });
   it.each([
     null,
     {},

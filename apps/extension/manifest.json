@@ -1,16 +1,21 @@
 {
   "manifest_version": 3,
   "name": "SmartAssistance",
-  "description": "Fix grammar or improve text in the editor you are using.",
-  "version": "0.1.0",
+  "description": "Translate selected page text, fix grammar, or improve writing in your editor.",
+  "version": "0.1.1",
   "minimum_chrome_version": "116",
+  "icons": {
+    "16": "assets/icon16.png",
+    "48": "assets/icon48.png",
+    "128": "assets/icon128.png"
+  },
   "permissions": ["activeTab", "alarms", "contextMenus", "scripting", "sidePanel", "storage"],
   "host_permissions": ["http://127.0.0.1:8787/*"],
   "background": {
     "service_worker": "service-worker.js"
   },
   "action": {
-    "default_title": "Rewrite focused text"
+    "default_title": "Translate selection or rewrite focused text"
   },
   "side_panel": {
     "default_path": "sidepanel.html"

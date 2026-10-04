@@ -7,6 +7,19 @@ gaps. ADRs remain the authority for consequential decisions.
 SmartAssistance is a privacy-first browser writing assistant. Architecture
 decisions belong in `docs/decisions/`; ADR-0001 defines the initial runtime and
 system boundary. ADR-0002 defines interaction identity, expiry, and bounded AI execution.
+Selected-text reading translation reuses these boundaries; see
+[ADR-0005](../decisions/0005-selected-text-translation.md) for capture scope,
+the original translation-only panel, and mutation exclusion. The current
+Original/Translation presentation is defined in ADR-0010 below.
+Vietnamese defaults and one-shot context-menu generation are described in
+[ADR-0006](../decisions/0006-immediate-context-menu-translation.md).
+The dropdown-driven reading flow and queued language changes are defined in
+[ADR-0007](../decisions/0007-language-change-translation.md).
+Selection-based sound icons, automatic local source-language detection, and the
+playback lifecycle are defined in
+[ADR-0010](../decisions/0010-selection-sound-controls.md).
+First-opening translation waits for visible-panel readiness as described in
+[ADR-0011](../decisions/0011-initial-reading-readiness.md).
 
 ## Principles
 
@@ -55,9 +68,11 @@ flowchart LR
 | Source | Responsibility |
 | --- | --- |
 | `apps/extension/src/sidepanel.ts`, `.html`, `.css` | Controls, consent disclosure, preview, copy, and user actions |
+| `apps/extension/src/pronunciation.ts` | Local-only voice selection, bounded playback and cancellation |
 | `apps/extension/src/service-worker.ts` | Invocation, document targeting, shared interaction state, network requests, cancellation, expiry |
 | `apps/extension/src/content-script.ts` | Validated Chrome messages into editor operations |
 | `apps/extension/src/editor.ts` | Eligibility, complete-field capture, conflict detection, plain-text application, undo |
+| `apps/extension/src/selection.ts` | Explicit visible DOM selection capture with exclusion and length checks; no page mutation |
 | `apps/extension/src/messages.ts` | Internal message validators, interaction identities, storage keys, expiry policy |
 | `packages/contracts/src/index.ts` | Provider-independent public types and runtime validation |
 | `apps/api/src/index.ts`, `config.ts` | Composition, environment validation, process startup and shutdown |
@@ -89,6 +104,34 @@ domain service does not import Chrome, the HTTP server, or the OpenAI SDK.
   [ADR-0003](../decisions/0003-managed-editor-native-insertion.md).
 - Requires versioned first-use consent at the service-worker boundary, scopes it
   to the configured API endpoint, and expires captures after ten minutes.
+- Registers authenticated reading ports before acknowledging `READING_READY`.
+  The panel waits for acknowledgement on its current port before translation or
+  polling, and reconsiders pending initial translation on visibility/readiness.
+  One-shot attempt guards prevent retries when reopening attempted interactions.
+
+### Local pronunciation
+
+Pronunciation runs entirely inside the extension panel using browser speech
+synthesis. Original and translated text are shown in read-only text areas, never
+interpreted as model-generated HTML. Each area has a sound icon for its selection
+or full passage, which becomes Stop while preparing/playing. The panel assigns a
+compatible local voice explicitly. Chrome's built-in language detector determines
+the original passage's dominant language with a two-second deadline; action
+revision and snapshot checks reject superseded results. Translation speech uses
+the target language. Speech stops on interaction invalidation or panel hide/close.
+Original text starts collapsed in reading mode and expands via a keyboard-accessible
+toggle. The panel keeps expansion only for the current capture; a new capture
+collapses it. Compact 14px text and internal scrolling leave more room for the
+translation. Writing mode continues to display its original text directly.
+Sound-icon activation keeps a selected phrase focused in its text area so native
+highlighting remains visible during and after playback. Pointer focus transfer to
+the sound icon is suppressed for a selected phrase. Clicking elsewhere or leaving
+the panel clears the selection; clearing/replacing text invalidates it. This uses
+only native selection offsets and panel-local element references, without copying
+text into storage or adding a selection history.
+The speech adapter handles unavailable voices, errors, superseded callbacks, and
+a 60-second timeout. It introduces no API contract, provider call, permission,
+audio persistence, or microphone access.
 
 ### Shared contracts
 

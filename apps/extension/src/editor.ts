@@ -26,6 +26,11 @@ export function clearEditorSnapshot(snapshotId?: string): void {
 function isInput(element: HTMLElement): element is HTMLInputElement | HTMLTextAreaElement {
   return element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement;
 }
+function parentAcrossShadowRoot(element: Element): Element | null {
+  if (element.parentElement) return element.parentElement;
+  const root = element.getRootNode();
+  return root instanceof ShadowRoot ? root.host : null;
+}
 function isUnavailable(element: HTMLElement): boolean {
   if (
     !element.isConnected ||
@@ -45,9 +50,13 @@ function isUnavailable(element: HTMLElement): boolean {
       )
   )
     return true;
-  for (let ancestor: HTMLElement | null = element; ancestor; ancestor = ancestor.parentElement) {
+  for (
+    let ancestor: Element | null = element;
+    ancestor;
+    ancestor = parentAcrossShadowRoot(ancestor)
+  ) {
     if (
-      ancestor.hidden ||
+      ancestor.hasAttribute("hidden") ||
       ancestor.hasAttribute("inert") ||
       ancestor.getAttribute("aria-hidden") === "true" ||
       ancestor.getAttribute("aria-disabled") === "true" ||
@@ -76,8 +85,13 @@ function isUnavailable(element: HTMLElement): boolean {
   }
   return false;
 }
+function focusedElement(root: Document | ShadowRoot): HTMLElement | undefined {
+  const element = root.activeElement;
+  if (!(element instanceof HTMLElement)) return undefined;
+  return element.shadowRoot ? (focusedElement(element.shadowRoot) ?? element) : element;
+}
 function findSupportedEditor(documentValue: Document): SupportedEditor | undefined {
-  const element = documentValue.activeElement;
+  const element = focusedElement(documentValue);
   if (!(element instanceof HTMLElement)) return undefined;
   const editor = isInput(element) ? element : element.closest<HTMLElement>("[contenteditable]");
   return editor && !isUnavailable(element) && !isUnavailable(editor) ? editor : undefined;
@@ -104,7 +118,7 @@ async function insertNativeText(snapshot: EditorSnapshot, text: string): Promise
   // Focus handlers can change or replace the captured editor.
   if (
     isUnavailable(element) ||
-    documentValue.activeElement !== element ||
+    focusedElement(documentValue) !== element ||
     readEditorText(element) !== expectedText ||
     markup(element) !== expectedMarkup
   )
@@ -131,7 +145,7 @@ async function insertNativeText(snapshot: EditorSnapshot, text: string): Promise
   );
 }
 function dispatchEditorEvents(element: HTMLElement): void {
-  element.dispatchEvent(new Event("input", { bubbles: true }));
+  element.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
   element.dispatchEvent(new Event("change", { bubbles: true }));
 }
 function writeEditorText(element: SupportedEditor, text: string): void {

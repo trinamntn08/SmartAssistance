@@ -9,8 +9,8 @@ implemented capabilities, verification evidence, and outstanding work.
 
 ## Product vision
 
-- One-sentence vision: Help people turn rough text into clear, natural writing
-  without leaving the browser field where they are working.
+- One-sentence vision: Help people understand, pronounce, and write another
+  language without leaving the browser.
 - Problem being solved: Writing and translating comments or emails currently
   requires copying sensitive text into another application, editing the result,
   and copying it back.
@@ -20,11 +20,14 @@ implemented capabilities, verification evidence, and outstanding work.
 ## Users and jobs
 
 - Primary user: A multilingual knowledge worker or online contributor writing
-  emails, comments, and short messages in Chrome.
+  emails, comments, and short messages in Chrome, including people living, working,
+  or studying in a foreign language.
 - User's current workflow: Draft text, copy it into a separate AI or translation
   product, describe the desired rewrite, and paste the result back.
 - Most important job to be done: Fix grammar or improve the complete draft in
   its original editor while preserving meaning and important details.
+- Reading and learning job: Understand selected foreign-language text and hear
+  how translated words or the original selected passage are pronounced.
 - Accessibility and locale needs: Full keyboard operation, visible focus states,
   screen-reader labels, right-to-left text support, and a localized interface.
 
@@ -48,6 +51,18 @@ implemented capabilities, verification evidence, and outstanding work.
 - Complete-field capture for plain inputs, textareas, and basic contenteditable
   editors.
 - Two writing modes: grammar correction and writing improvement.
+- Reading translation: explicitly selected visible page text, a remembered target
+  language, and a panel displaying Original and Translation without Copy/Replace.
+  Original text starts collapsed and can be expanded with one click. New captures
+  collapse it again; compact 14px text prioritizes visible translation content.
+- Pronunciation: one sound icon beside each text area reads its selected text,
+  or the full passage if nothing is selected. The same icon stops playback.
+  Chrome detects the original language locally; translation uses the target
+  language. Only compatible local voices are allowed. No extra pronunciation
+  language controls, automatic audio, remote voices, recording, or saved audio.
+- Active reading while the panel is visible: new settled selections on the
+  explicitly invoked active tab translate automatically after consent. Closing
+  or hiding the panel stops capture; writing-field selections are excluded.
 - Natural and formal styles for writing improvement; grammar correction preserves
   the draft's existing style.
 - Automatic source-language detection and explicit target-language selection.
@@ -67,6 +82,8 @@ implemented capabilities, verification evidence, and outstanding work.
   integrations.
 - Mobile browsers, Firefox, Safari, and Edge packaging.
 - Organization administration, shared style guides, and billing.
+- Speech recognition, microphone recording, pronunciation scoring, and remote
+  speech services.
 
 ## Functional requirements
 
@@ -83,6 +100,36 @@ implemented capabilities, verification evidence, and outstanding work.
    overwrite it and keeps the rewrite available to copy.
 8. The user can restore the previous value immediately after replacement.
 9. Password, payment, hidden, disabled, and read-only fields are never captured.
+10. Selecting visible page text and invoking the toolbar opens a simple translation
+    panel with a target language, the original selected text, and the translation.
+    Original text is collapsed by default and expandable with a keyboard-accessible
+    toggle. A new capture resets it to collapsed. Both text areas use 14px text;
+    translation fills the free space while Original is collapsed.
+    It does not offer Copy/Replace. The translation language is remembered;
+    Vietnamese is the default. The selection context-menu action translates
+    immediately after consent. Toolbar invocation with a selection also translates
+    immediately, and changing the language requests a new translation without a
+    Translate button. Translation never changes the webpage.
+    If capture arrives before the panel is visible or connected, initial translation
+    starts automatically once the visible reading connection is ready, consent and
+    preferences are loaded, and the capture is valid. No language change is required.
+11. The user can select a word or phrase in Original or Translation and click its
+    sound icon to hear it. With no selection, the whole passage is read. The icon
+    becomes Stop while preparing/playing; Enter/Space also activates it. Using the
+    other icon cancels previous speech. Playback uses only compatible local voices
+    and reports unavailable voices without falling back to a remote service.
+    Missing-voice guidance identifies the requested language, offers a Windows
+    speech-settings link and device installation instructions, and checks available
+    voices again on the next sound click. OS installation requires user confirmation;
+    the extension does not install software or download voice packages itself.
+    Selected text stays focused and highlighted through pronunciation completion
+    and stopping. Clicking elsewhere or leaving the panel clears the selection;
+    clearing or replacing that text invalidates the highlight.
+12. Chrome detects the original passage's dominant language locally for speech,
+    with a two-second deadline and an error if it cannot identify a usable language.
+    Translation speech uses the chosen target language. No new API call is made.
+    Playback stops on panel hide/close, capture change/expiry, language/result
+    change, or withdrawal of consent, and is capped at 60 seconds per utterance.
 
 ## Non-functional requirements
 
@@ -94,7 +141,8 @@ implemented capabilities, verification evidence, and outstanding work.
   Windows, macOS, and Linux development support.
 - Data residency, retention, and deletion: Do not persist draft or rewritten text
   in the SmartAssistance database, cache, analytics, or application logs. Send
-  only the active field to the configured model provider. Document provider
+  only the captured writing field or explicit reading selection to the configured
+  model provider. Document provider
   retention separately and request `store: false` where supported.
 - Authentication and authorization: Production users authenticate with a
   SmartAssistance account through a browser OAuth flow. The extension receives a
@@ -109,14 +157,18 @@ implemented capabilities, verification evidence, and outstanding work.
 - Why AI is needed for this workflow: Rephrasing must preserve intent, tone,
   nuance, and multilingual meaning rather than perform literal substitution.
 - Inputs and allowed data classes: User-invoked plain text from the active editor,
-  the requested transformation, tone, source-language mode, and target language.
+  or explicitly selected visible page text for reading translation, the requested
+  transformation, applicable tone, source-language mode, and target language.
   Surrounding page content is excluded.
 - Required outputs and structured contracts: One non-empty rewritten text value,
   detected language when available, and a request identifier. No commentary,
   markup, or executable instructions.
 - Actions or tools the model may invoke: None.
 - Actions that require human confirmation: Replacing editor content. Sending the
-  draft is also preceded by first-use disclosure and consent.
+  text is also preceded by first-use disclosure and consent. Reading translation
+  is sent when the user opens selected text, invokes the explicit Translate
+  context-menu action, or changes translation language after consent, and never
+  modifies the page.
 - Failure and fallback behavior: Preserve the original editor, show a concise
   retryable error, and allow copying any successfully generated preview.
 - Quality evaluation set and acceptance threshold: Versioned examples covering

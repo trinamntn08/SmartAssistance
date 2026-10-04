@@ -98,6 +98,7 @@ select {
 
 textarea {
   min-height: 105px;
+  font-size: 14px;
   resize: vertical;
   line-height: 1.45;
 }
@@ -161,4 +162,141 @@ footer {
 footer {
   border-top: 1px solid #dce1eb;
   padding-top: 12px;
+}
+
+/* Give reading translations the remaining sidebar height, including on resize. */
+body.translation-view main {
+  height: 100dvh;
+  min-height: 400px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+}
+
+body.translation-view main > :not(#workspace) {
+  flex-shrink: 0;
+}
+
+body.translation-view .status {
+  padding: 6px 8px;
+}
+
+.text-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.original-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  border: 0;
+  padding: 5px 0;
+  background: transparent;
+  color: #34415a;
+  font-size: 12px;
+  font-weight: 650;
+}
+.original-toggle[aria-expanded="true"] svg {
+  transform: rotate(90deg);
+}
+.sound-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  min-height: 32px;
+  padding: 5px;
+}
+.sound-button .stop-icon,
+.sound-button.playing .speaker-icon {
+  display: none;
+}
+.sound-button.playing .stop-icon {
+  display: block;
+}
+body.translation-view #workspace {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+body.translation-view .options {
+  order: 0;
+  flex-shrink: 0;
+  grid-template-columns: minmax(0, 1fr);
+}
+body.translation-view #original-section,
+body.translation-view #result {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+  flex: 1;
+}
+body.translation-view #original-section {
+  order: 1;
+  flex: 0 0 auto;
+}
+body.translation-view #original-section.expanded {
+  flex: 1;
+}
+body.translation-view #cancel {
+  order: 2;
+  flex-shrink: 0;
+}
+body.translation-view #result {
+  order: 3;
+}
+body.translation-view #speech-status {
+  order: 4;
+  flex-shrink: 0;
+}
+body.translation-view #voice-install {
+  order: 5;
+  flex-shrink: 0;
+  max-height: 160px;
+  overflow-y: auto;
+}
+#voice-install p {
+  margin: 0 0 6px;
+}
+#voice-install a {
+  display: inline-block;
+  margin-right: 10px;
+}
+#voice-install a[hidden] {
+  display: none;
+}
+body.translation-view #original,
+body.translation-view #preview {
+  flex: 1;
+  min-height: 0;
+  resize: none;
+  font-size: 14px;
+  line-height: 1.45;
+}
+body.translation-view textarea::selection {
+  background: #cbdcff;
+  color: #172033;
+}
+#speech-status:empty {
+  display: none;
+}
+body.translation-view #result .actions {
+  display: none;
+}
+
+body.translation-view footer {
+  padding-top: 8px;
+  font-size: 11px;
+}
+
+body.translation-view #clear-private-data {
+  min-height: 28px;
+  padding: 4px 8px;
 }

@@ -1,6 +1,6 @@
 import type { RewriteRequest } from "@smartassistance/contracts";
 
-export const REWRITE_EVALUATION_VERSION = "rewrite-evals-2026-09-06.1";
+export const REWRITE_EVALUATION_VERSION = "rewrite-evals-2026-10-03.1";
 
 export type RewriteInvariant =
   | { kind: "substring" | "token"; value: string }
@@ -184,10 +184,10 @@ export const REWRITE_EVALUATION_CASES: readonly RewriteEvaluationCase[] = [
     humanReview: "Use natural Arabic and preserve the reviewer, quantity, and pending approval.",
   },
   {
-    id: "improve-english-french",
+    id: "translate-english-french",
     request: draft(
       "Mira Chen will review 16 files for CASE-15 on 2026-10-21.\n\nPlease use https://example.invalid/cases/CASE-15.",
-      "improve",
+      "translate",
       "formal",
       "fr",
     ),
@@ -199,13 +199,14 @@ export const REWRITE_EVALUATION_CASES: readonly RewriteEvaluationCase[] = [
       substring("https://example.invalid/cases/CASE-15"),
       paragraphs,
     ],
-    humanReview: "Return French while preserving the future commitment and paragraph roles.",
+    humanReview:
+      "Translate faithfully into French, preserving tone, the future commitment, and paragraph roles.",
   },
   {
-    id: "improve-chinese-english",
+    id: "translate-chinese-english",
     request: draft(
       "请让Lin Yue检查编号CN-52的27份文件。尚未批准发货。",
-      "improve",
+      "translate",
       "natural",
       "en",
     ),
@@ -216,13 +217,13 @@ export const REWRITE_EVALUATION_CASES: readonly RewriteEvaluationCase[] = [
       forbidden("Shipment has been approved"),
     ],
     humanReview:
-      "Return English for the Chinese request and preserve the explicit lack of shipment approval.",
+      "Translate the Chinese request into English, preserving tone and the lack of shipment approval.",
   },
   {
-    id: "improve-english-arabic",
+    id: "translate-english-arabic",
     request: draft(
       "Please ask Mira Chen to review 23 items for AR-44. The report is at https://example.invalid/AR-44.",
-      "improve",
+      "translate",
       "natural",
       "ar",
     ),
@@ -233,13 +234,13 @@ export const REWRITE_EVALUATION_CASES: readonly RewriteEvaluationCase[] = [
       substring("https://example.invalid/AR-44"),
     ],
     humanReview:
-      "Use natural RTL Arabic while preserving Latin names and exact digits as required by policy.",
+      "Translate faithfully into RTL Arabic, preserving tone, Latin names, and exact digits.",
   },
   {
-    id: "improve-spanish-english",
+    id: "translate-spanish-english",
     request: draft(
       "No puedo confirmar el envío de ES-72. Podría revisar 14 muestras si llega la aprobación.",
-      "improve",
+      "translate",
       "natural",
       "en",
     ),

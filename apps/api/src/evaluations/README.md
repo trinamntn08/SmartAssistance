@@ -1,10 +1,15 @@
 # Rewrite evaluations
 
 `cases.ts` is a versioned initial corpus of 20 synthetic drafts. It covers both
-writing modes and the two improvement styles, names, numbers, dates, identifiers, links,
+writing modes, the two improvement styles, and faithful selected-text translation;
+it covers names, numbers, dates, identifiers, links,
 email addresses, mentions, emoji, negation, conditional commitments, paragraph
 breaks, French, Spanish, Japanese, Chinese, Arabic, mixed-language passages,
 instruction-like input, and a draft near the 10,000-character input limit.
+The four translation cases exercise English-to-French, Chinese-to-English,
+English-to-Arabic, and Spanish-to-English, with tone and conditional meaning
+assessed by human review. The corpus remains at 20 cases within the existing
+live-run budget.
 
 This is initial coverage, not a representative benchmark of every supported
 language or writing task. Update the corpus version when cases or their checks

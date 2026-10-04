@@ -1,4 +1,4 @@
-export const REWRITE_OPERATIONS = ["grammar", "improve"] as const;
+export const REWRITE_OPERATIONS = ["grammar", "improve", "translate"] as const;
 export const REWRITE_TONES = ["natural", "formal"] as const;
 export const MAX_REWRITE_CHARACTERS = 10_000;
 export const MAX_REWRITTEN_CHARACTERS = 20_000;
@@ -94,6 +94,14 @@ export function parseRewriteRequest(input: unknown): ParseResult<RewriteRequest>
 
   if (input.operation === "grammar" && input.tone !== undefined) {
     return { success: false, message: "Fix grammar does not use a tone." };
+  }
+
+  if (input.operation === "translate" && input.tone !== undefined) {
+    return { success: false, message: "Translation does not use a tone." };
+  }
+
+  if (input.operation === "translate" && input.targetLanguage === "same") {
+    return { success: false, message: "Choose a target language for translation." };
   }
 
   if (typeof input.targetLanguage !== "string" || !LANGUAGE_TAG.test(input.targetLanguage)) {

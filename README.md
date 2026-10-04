@@ -1,7 +1,45 @@
 # SmartAssistance
 
 SmartAssistance is a privacy-first Chrome writing assistant that fixes grammar
-or improves the complete text in a focused email, comment, or message field.
+or improves the complete text in a focused email, comment, or message field,
+and helps people understand, pronounce, and write another language by translating
+selected page text and playing pronunciation on request.
+
+To translate while reading, select visible text, right-click, and choose
+**Translate with SmartAssistance**. Translation starts immediately after first-use
+consent, using Vietnamese by default or your saved language. Clicking the
+extension icon with selected text also starts translation. Change the language
+in the dropdown to translate again automatically; there is no Translate button.
+The side panel shows the original selection and its translation, each with a
+sound icon. It does not offer Copy/Replace in reading mode. The
+language is remembered locally. Without a selection, the toolbar keeps the
+focused-editor writing workflow. First use requires consent before sending text.
+Original text is collapsed by default so the translation gets more space. Click
+**Original** to expand or collapse it; a new passage starts collapsed again.
+Both text areas use compact 14px text and scroll internally. When Original is
+expanded, the two areas share the available sidebar height and resize with the window.
+While the panel is visible, select another passage on that same page to translate
+it automatically after a brief pause. Hiding or closing the panel stops active
+reading. Navigation or switching to another page requires invoking the extension
+there again; writing fields are not monitored.
+
+Click the sound icon beside Original or Translation to hear that passage. Select
+a word or phrase in either text area first to hear only the selected text. The
+same icon becomes Stop during playback; click it again to stop. The icons also
+work with Tab and Enter/Space. The original language is detected locally by Chrome;
+translation speech uses the selected target language. There is no pronunciation
+language picker. Detection is best effort for short or mixed-language passages.
+The spoken selection stays highlighted during and after playback, including when
+you stop it. Clicking elsewhere clears the selection; replacing or clearing the
+text also clears it.
+Pronunciation uses only local device voices, with no additional API call. If a
+language has no local voice, the panel names the missing language and offers
+installation guidance. On Windows, **Open speech settings** opens voice management;
+choose **Add voices**, select the language, and confirm the download. Then click
+the sound icon again (restart Chrome if needed). Chrome cannot install OS voices
+or guarantee that an installed voice is exposed to the browser.
+Playback stops when the panel hides/closes, text or language changes, consent is
+withdrawn, or the capture expires. Voice quality and availability vary by device.
 
 ## Current status
 
@@ -58,6 +96,8 @@ For a limited friends-and-family deployment, see the
 
 - Keep secrets out of Git. Copy `.env.example` to `.env` for local values.
 - Prefer small, reviewable changes tied to an explicit outcome.
+- Record each completed step and its validation in `docs/status.md`, update
+  relevant documentation, and commit the step before starting the next one.
 - Record consequential and hard-to-reverse choices as ADRs.
 - Add automated tests with behavior changes.
 - Run `npm run check` before opening a pull request.
