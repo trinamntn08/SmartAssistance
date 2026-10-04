@@ -4,6 +4,19 @@ Snapshot: 2026-10-04. The local MVP is implemented. Public release is not comple
 The [product brief](product/PROJECT_BRIEF.md) defines the target requirements;
 the [architecture overview](architecture/README.md) describes the current code.
 
+## Step record: 2026-10-04 local translation feasibility
+
+- Outcome: added an isolated API probe and accepted
+  [ADR-0013](decisions/0013-chrome-local-reading-translation.md) for implementation.
+- Evidence: `node scripts/probe-local-translation.mjs` passed in headless
+  Chromium 153.0.8010.12 on Windows. Both APIs were exposed and en->vi / fr->vi
+  packs were downloadable; the detector was unavailable. No real translation,
+  download, native panel test, latency measurement, or quality review completed.
+- Adjustment: proceed with guarded implementation and deterministic tests under
+  the user's implementation request; retain the real-model feasibility/quality
+  checks as unresolved release gates rather than treating them as passed.
+- Validation: probe passed. Formatting/lint/diff checks recorded in this commit.
+
 ## Step record: 2026-10-04 local translation planning
 
 - Outcome: added the [Chrome local translation integration plan](local-translation-plan.md)
