@@ -71,6 +71,75 @@ describe("local translation adapter", () => {
     });
     expect(platform.translator.availability).not.toHaveBeenCalled();
   });
+  it("uses reliable local extension detection when the model is uncertain on a French headline", async () => {
+    const { detector, platform, controller } = setup();
+    detector.detect.mockResolvedValue([{ detectedLanguage: "fr", confidence: 0.6 }]);
+    const fallback = vi.fn(async () => ({
+      isReliable: true,
+      languages: [{ language: "fr", percentage: 100 }],
+    }));
+    const adapter = createLocalTranslation({ ...platform, detectLocalLanguage: fallback });
+    const text =
+      'Didier Deschamps menacé par Pascal Olmeta avec une arme, Jean-Pierre Papin témoin de cette scène surréaliste : "Il est entré avec un pistolet"';
+    expect((await adapter.translate(text, "vi", controller.signal)).sourceLanguage).toBe("fr");
+    expect(fallback).toHaveBeenCalledExactlyOnceWith(text);
+    expect(platform.translator.availability).toHaveBeenCalledWith({
+      sourceLanguage: "fr",
+      targetLanguage: "vi",
+    });
+  });
+  it("does not consult a fallback for confident model detection", async () => {
+    const { platform, controller } = setup();
+    const fallback = vi.fn();
+    await createLocalTranslation({ ...platform, detectLocalLanguage: fallback }).translate(
+      "Hello",
+      "vi",
+      controller.signal,
+    );
+    expect(fallback).not.toHaveBeenCalled();
+  });
+  it.each([
+    { isReliable: false, languages: [{ language: "fr", percentage: 100 }] },
+    { isReliable: true, languages: [{ language: "fr", percentage: 60 }] },
+    {
+      isReliable: true,
+      languages: [
+        { language: "fr", percentage: 80 },
+        { language: "en", percentage: 70 },
+      ],
+    },
+    { isReliable: true, languages: [{ language: "und", percentage: 100 }] },
+    { isReliable: true, languages: [{ language: "fr", percentage: 101 }] },
+  ])("rejects unreliable or invalid fallback detection: %j", async (result) => {
+    const { detector, platform, controller } = setup();
+    detector.detect.mockResolvedValue([{ detectedLanguage: "fr", confidence: 0.6 }]);
+    const adapter = createLocalTranslation({
+      ...platform,
+      detectLocalLanguage: async () => result,
+    });
+    await expect(
+      adapter.translate("Synthetic title", "vi", controller.signal),
+    ).rejects.toMatchObject({ code: "UNCERTAIN_LANGUAGE" });
+    expect(platform.translator.create).not.toHaveBeenCalled();
+  });
+  it("bounds fallback detection and never starts translation after cancellation", async () => {
+    vi.useFakeTimers();
+    const { detector, platform, controller } = setup();
+    detector.detect.mockResolvedValue([{ detectedLanguage: "fr", confidence: 0.6 }]);
+    const fallback = vi.fn(() => new Promise<unknown>(() => {}));
+    const adapter = createLocalTranslation({ ...platform, detectLocalLanguage: fallback });
+    const request = adapter.translate("Synthetic title", "vi", controller.signal);
+    const rejected = expect(request).rejects.toMatchObject({ code: "UNCERTAIN_LANGUAGE" });
+    await vi.advanceTimersByTimeAsync(2_001);
+    await rejected;
+    expect(platform.translator.create).not.toHaveBeenCalled();
+    const next = adapter.translate("Synthetic title", "vi", controller.signal);
+    const cancelled = expect(next).rejects.toMatchObject({ code: "CANCELLED" });
+    await vi.advanceTimersByTimeAsync(0);
+    controller.abort();
+    await cancelled;
+    expect(platform.translator.create).not.toHaveBeenCalled();
+  });
   it("accepts Chrome's appended und candidate when a known language is confident", async () => {
     const { adapter, detector, platform, controller } = setup();
     detector.detect.mockResolvedValue([
@@ -306,14 +375,21 @@ describe("local translation adapter", () => {
     await vi.advanceTimersByTimeAsync(milliseconds);
     await rejected;
   });
-  it("detects browser APIs structurally and reads activation at invocation time", () => {
+  it("detects browser APIs structurally and reads activation at invocation time", async () => {
     const { platform } = setup();
     vi.stubGlobal("Translator", platform.translator);
     vi.stubGlobal("LanguageDetector", platform.languageDetector);
     const activation = { isActive: false };
     vi.stubGlobal("navigator", { userActivation: activation });
+    const detectLanguage = vi.fn(async () => ({
+      isReliable: true,
+      languages: [{ language: "fr", percentage: 100 }],
+    }));
+    vi.stubGlobal("chrome", { i18n: { detectLanguage } });
     const browser: LocalTranslationPlatform | undefined = browserLocalTranslationPlatform();
     expect(browser?.isUserActive()).toBe(false);
+    await browser?.detectLocalLanguage?.("Synthetic French");
+    expect(detectLanguage).toHaveBeenCalledExactlyOnceWith("Synthetic French");
     activation.isActive = true;
     expect(browser?.isUserActive()).toBe(true);
     vi.stubGlobal("Translator", {});

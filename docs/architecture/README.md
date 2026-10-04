@@ -25,6 +25,8 @@ Reading now runs on Chrome's local models under
 Rendered reading capture and open-shadow selection validation are refined by
 [ADR-0014](../decisions/0014-copyable-reading-selections.md) and
 [ADR-0015](../decisions/0015-shadow-reading-selections.md).
+Uncertain reading language detection uses the bounded local fallback defined in
+[ADR-0016](../decisions/0016-local-language-detection-fallback.md).
 
 ## Principles
 

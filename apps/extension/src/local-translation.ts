@@ -45,6 +45,7 @@ interface Pair {
   targetLanguage: string;
 }
 export interface LocalTranslationPlatform {
+  detectLocalLanguage?: (text: string) => Promise<unknown>;
   languageDetector: {
     availability(): Promise<string>;
     create(options: CreateOptions): Promise<LocalDetector>;
@@ -59,6 +60,7 @@ export interface LocalTranslationPlatform {
 const DETECTION_MS = 5_000;
 const TRANSLATION_MS = 15_000;
 const SETUP_MS = 120_000;
+const FALLBACK_DETECTION_MS = 2_000;
 
 function destroy(model: Model | undefined): void {
   try {
@@ -113,6 +115,31 @@ function detectedLanguage(value: unknown): string {
     throw new LocalTranslationError("UNCERTAIN_LANGUAGE");
   }
   return best.language;
+}
+
+function nativeDetectedLanguage(value: unknown): string {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    !("isReliable" in value) ||
+    value.isReliable !== true ||
+    !("languages" in value) ||
+    !Array.isArray(value.languages)
+  )
+    throw new LocalTranslationError("UNCERTAIN_LANGUAGE");
+  return detectedLanguage(
+    value.languages.map((entry: unknown) => {
+      if (
+        !entry ||
+        typeof entry !== "object" ||
+        !("language" in entry) ||
+        !("percentage" in entry) ||
+        typeof entry.percentage !== "number"
+      )
+        throw new LocalTranslationError("UNCERTAIN_LANGUAGE");
+      return { detectedLanguage: entry.language, confidence: entry.percentage / 100 };
+    }),
+  );
 }
 
 export function createLocalTranslation(
@@ -230,9 +257,31 @@ export function createLocalTranslation(
       // Download time is separate from the warm detection budget.
       const detectionBudget = downloaded ? DETECTION_MS : detectionDeadline - Date.now();
       const instance = detector;
-      const source = detectedLanguage(
-        await wait(() => instance.detect(text, { signal: operation.signal }), detectionBudget),
+      const detected = await wait(
+        () => instance.detect(text, { signal: operation.signal }),
+        detectionBudget,
       );
+      let source: string;
+      try {
+        source = detectedLanguage(detected);
+      } catch (error) {
+        const fallbackDetection = platform.detectLocalLanguage;
+        if (
+          !(error instanceof LocalTranslationError) ||
+          error.code !== "UNCERTAIN_LANGUAGE" ||
+          !fallbackDetection
+        )
+          throw error;
+        try {
+          source = nativeDetectedLanguage(
+            await wait(() => fallbackDetection(text), FALLBACK_DETECTION_MS),
+          );
+        } catch (fallbackError) {
+          if (fallbackError instanceof LocalTranslationError && fallbackError.code === "CANCELLED")
+            throw fallbackError;
+          throw error;
+        }
+      }
       assertActive();
       if (source === target) return { text, sourceLanguage: source };
       const requestedPair = { sourceLanguage: source, targetLanguage: target };
@@ -299,6 +348,7 @@ export function browserLocalTranslationPlatform(): LocalTranslationPlatform | un
     Translator?: LocalTranslationPlatform["translator"];
     LanguageDetector?: LocalTranslationPlatform["languageDetector"];
     navigator?: { userActivation?: { isActive?: boolean } };
+    chrome?: { i18n?: { detectLanguage?: (text: string) => Promise<unknown> } };
   };
   if (
     typeof browser.Translator?.availability !== "function" ||
@@ -308,9 +358,12 @@ export function browserLocalTranslationPlatform(): LocalTranslationPlatform | un
   ) {
     return undefined;
   }
+  const i18n = browser.chrome?.i18n;
+  const fallbackDetection = i18n?.detectLanguage?.bind(i18n);
   return {
     translator: browser.Translator,
     languageDetector: browser.LanguageDetector,
     isUserActive: () => browser.navigator?.userActivation?.isActive === true,
+    ...(typeof fallbackDetection === "function" ? { detectLocalLanguage: fallbackDetection } : {}),
   };
 }

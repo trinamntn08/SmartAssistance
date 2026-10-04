@@ -21,6 +21,8 @@ See [ADR-0013](decisions/0013-chrome-local-reading-translation.md).
    device policy and try again; no text is sent to a paid fallback.
 5. Verify Original expansion, sound controls, keyboard use, and language memory.
    Select a longer passage when language detection is uncertain.
+   The extension also checks its built-in local language detector once when the
+   model's result is uncertain; both detectors retain strict confidence checks.
 
 ## Native browser and privacy checks
 

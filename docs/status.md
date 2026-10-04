@@ -4,6 +4,32 @@ Snapshot: 2026-10-04. The local MVP is implemented. Public release is not comple
 The [product brief](product/PROJECT_BRIEF.md) defines the target requirements;
 the [architecture overview](architecture/README.md) describes the current code.
 
+## Step record: 2026-10-04 reliable local detection fallback
+
+- Outcome: uncertain reading language results now consult the existing local
+  extension detector once, with a two-second deadline. Require reliable output,
+  validated languages/scores, an 80-percent winner, and a 20-point margin. Keep
+  cancellation, consent, capture identity, and local-only translation. No page
+  locale guessing, relaxed confidence, cloud requests, or added permissions.
+  Added ADR-0016 and updated reading setup/architecture documentation.
+- Evidence: isolated Edge extension detection identified the user's exact public
+  French headline and supplied paragraph as reliable French, 100 percent. This
+  does not establish the primary detector's actual scores on the user's device.
+- Validation: `npm run format` and `npm run check` passed with 287 unit tests,
+  builds, and all 33 then-existing Chromium workflows. Initial lint warnings for
+  non-null assertions were removed. Final lint, formatting, type checks, 287 unit
+  tests, and workspace builds passed. An additional synthetic French-paragraph
+  recovery workflow then passed in Chromium and Edge with an uncertain fake
+  primary detector, real local extension detection, and zero cloud requests.
+  Commands: `npm run test:browser -- --grep "uncertain model detection recovers"`
+  and `npx playwright test --config tmp/edge-test.config.ts --grep
+  "uncertain model detection recovers"`. `git diff --check` passed.
+- Build: final extension generated directly in `apps/extension/dist`.
+  Reload the extension and refresh MSN before retesting. Native translation
+  quality/model availability remain separate gates; detector recovery alone
+  does not establish real translation quality. Both detectors can still reject
+  genuinely ambiguous text.
+
 ## Step record: 2026-10-04 fix mouse-selected shadow article capture
 
 - Outcome: reproduced the Edge empty-capture error with a real mouse selection

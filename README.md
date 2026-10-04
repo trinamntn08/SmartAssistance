@@ -16,7 +16,9 @@ Password, payment, verification-code, hidden, inert, and disabled fields remain 
 Reading translation runs locally in Chrome,
 using Vietnamese by default or your saved language after enabling local reading.
 Chrome 138+ and available device models are required; first use may show
-**Enable local translation** to download language packs. Clicking the
+**Enable local translation** to download language packs. If the model cannot
+identify the source confidently, the extension tries its other local detector
+once and accepts only a reliable result. Clicking the
 extension icon with selected text also starts translation. Change the language
 in the dropdown to translate again automatically; there is no Translate button.
 The side panel shows the original selection and its translation, each with a

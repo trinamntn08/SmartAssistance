@@ -758,6 +758,29 @@ test("missing browser translation API reports unavailability without cloud fallb
   expect(app.calls).toBe(0);
 });
 
+test("uncertain model detection recovers French prose through the local extension detector", async ({
+  app,
+}) => {
+  await app.panel.evaluate(() => {
+    Reflect.get(window, "testLocalTranslation").confidence = 0.55;
+  });
+  await app.editor.evaluate(() => {
+    const article = document.querySelector("#article");
+    if (!article) throw new Error("Missing article");
+    article.textContent =
+      "Les années passées dans le club de Marseille avaient marqué les carrières de Marie Durand, Luc Martin et Paul Moreau. Tous trois avaient évolué au sein du club au début des années 1990 et avaient notamment remporté un championnat en 1993. Si les trois joueurs avaient partagé de nombreux moments forts sur les terrains, leurs relations en dehors du football pouvaient parfois être beaucoup plus compliquées.";
+  });
+  await captureArticle(app);
+  await accept(app);
+  await expect(app.panel.locator("#preview")).toHaveValue(app.output);
+  expect(
+    await app.panel.evaluate(
+      () => Reflect.get(window, "testLocalTranslation").calls[0]?.sourceLanguage,
+    ),
+  ).toBe("fr");
+  expect(app.calls).toBe(0);
+});
+
 for (const failure of ["unsupported", "uncertain", "failed"] as const) {
   test(`local ${failure} stays offline and can retry after recovery`, async ({ app }) => {
     await app.panel.evaluate((kind) => {
