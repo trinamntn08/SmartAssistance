@@ -247,6 +247,49 @@ test("selected text shows original and translation without Copy and remembers la
   await expect(app.panel.locator("#original-section")).toBeVisible();
   await expect(app.panel.locator("#copy")).toBeHidden();
 });
+test("reading accepts copyable rendered text across hidden widgets and accessibility attributes", async ({
+  app,
+}) => {
+  await app.editor.bringToFront();
+  const copiedText = await app.editor.locator("#article").evaluate((element) => {
+    element.setAttribute("aria-hidden", "true");
+    element.setAttribute("aria-readonly", "true");
+    element.innerHTML =
+      'Bonjour <span hidden>HIDDEN SECRET</span><input autocomplete="cc-number" value="FIELD SECRET"><textarea>TEXTAREA SECRET</textarea><span>Marie</span>';
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    window.getSelection()?.removeAllRanges();
+    window.getSelection()?.addRange(range);
+    return window.getSelection()?.toString();
+  });
+  expect(copiedText).toBe("Bonjour Marie");
+  expect(await app.send({ type: "CAPTURE_ACTIVE_SELECTION" })).toMatchObject({ ok: true });
+  expect(await app.state()).toMatchObject({ source: "selection", draft: { text: copiedText } });
+  await accept(app);
+  await expect(app.panel.locator("#preview")).toHaveValue(app.output);
+  expect(app.calls).toBe(0);
+});
+
+test("explicit reading translates only selected read-only field text without enabling writing", async ({
+  app,
+}) => {
+  await app.editor.bringToFront();
+  await app.editor.locator("#readonly").evaluate((element: HTMLTextAreaElement) => {
+    element.value = "Outside Bonjour Marie Outside";
+    element.focus();
+    element.setSelectionRange(8, 21);
+  });
+  expect(await app.send({ type: "CAPTURE_ACTIVE_SELECTION" })).toMatchObject({ ok: true });
+  expect(await app.state()).toMatchObject({
+    source: "selection",
+    draft: { text: "Bonjour Marie" },
+  });
+  await accept(app);
+  await expect(app.panel.locator("#preview")).toHaveValue(app.output);
+  expect(await app.capture("#readonly")).toMatchObject({ ok: false });
+  expect(app.calls).toBe(0);
+});
+
 test("translation fills the sidebar and adapts to window height without page scrolling", async ({
   app,
 }, testInfo) => {

@@ -6,7 +6,12 @@ and helps people understand, pronounce, and write another language by translatin
 selected page text and playing pronunciation on request.
 
 To translate while reading, select visible text, right-click, and choose
-**Translate with SmartAssistance**. Reading translation runs locally in Chrome,
+**Translate with SmartAssistance**. This also supports explicitly selected text
+in ordinary text inputs and read-only textareas.
+Visible text remains eligible when a site marks it as accessibility-hidden or
+read-only; hidden widgets inside a passage do not block its visible selection.
+Password, payment, verification-code, hidden, inert, and disabled fields remain excluded.
+Reading translation runs locally in Chrome,
 using Vietnamese by default or your saved language after enabling local reading.
 Chrome 138+ and available device models are required; first use may show
 **Enable local translation** to download language packs. Clicking the

@@ -103,7 +103,9 @@ implemented capabilities, verification evidence, and outstanding work.
 7. If the draft changed while generation was running, the extension refuses to
    overwrite it and keeps the rewrite available to copy.
 8. The user can restore the previous value immediately after replacement.
-9. Password, payment, hidden, disabled, and read-only fields are never captured.
+9. Password, payment, verification-code, hidden, inert, and disabled fields are
+   never captured. Read-only fields are excluded from writing; explicit reading
+   translation may capture only the selected substring of an ordinary text field.
 10. Selecting visible page text and invoking the toolbar opens a simple translation
     panel with a target language, the original selected text, and the translation.
     Original text is collapsed by default and expandable with a keyboard-accessible

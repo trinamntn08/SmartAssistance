@@ -4,6 +4,12 @@
 
 Capture reads only explicitly selected visible page text for translation, or the
 complete focused eligible editor for writing, after a user invocation.
+Explicit reading invocation may also capture the selected substring of an ordinary
+text input or textarea, including read-only fields. It does not capture the whole
+field as a fallback. Browser-rendered selections omit hidden descendants and
+embedded form values; accessibility-only hidden/read-only attributes do not exclude
+visibly selected text. Password, payment, verification-code, hidden, inert, and
+disabled fields remain excluded. Automatic reading still excludes writing fields.
 Writing-field capture does not submit a request. First use requires acceptance of the disclosure;
 Generate then sends the captured text, writing mode, applicable improvement
 style, and target language to the configured SmartAssistance API and OpenAI.

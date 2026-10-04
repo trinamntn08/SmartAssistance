@@ -4,6 +4,32 @@ Snapshot: 2026-10-04. The local MVP is implemented. Public release is not comple
 The [product brief](product/PROJECT_BRIEF.md) defines the target requirements;
 the [architecture overview](architecture/README.md) describes the current code.
 
+## Step record: 2026-10-04 copyable reading selections
+
+- Outcome: fixed reading capture rejecting visually selectable text marked with
+  accessibility-only hidden/read-only/disabled attributes, or passages crossing
+  hidden widgets and embedded form controls. Explicit reading now captures only
+  the selected substring of ordinary inputs/textareas, including read-only fields.
+  Sensitive-field checks follow shadow hosts. Writing restrictions and active
+  reading's writing-field exclusions remain in place. No clipboard permission,
+  dependency, cloud request, or Edge implementation was added.
+- Validation: `npm run format` and the full `npm run check` passed: formatting,
+  lint, type checks, 267 tests across 16 files, all workspace builds, and 31
+  Chromium workflows. Four additional trust-boundary/length regression cases
+  were then added; `npm test` passed all 271 tests and `npm run typecheck` passed.
+  Final formatting, lint, and `git diff --check` passed. Synthetic Chromium
+  selections omit hidden text and embedded field values; both new reading
+  workflows translate locally with zero cloud requests. Test subprocesses used
+  approved execution outside the restricted sandbox.
+- Documentation: [ADR-0014](decisions/0014-copyable-reading-selections.md), the
+  product brief, README, and privacy disclosure record the revised reading scope.
+- Follow-up: reload the extension and refresh the affected page for real-site
+  retesting. The affected website has not yet been identified or independently
+  verified. Protected browser pages, PDF/canvas surfaces, and inaccessible frames
+  remain unsupported. Edge support stays in the existing plan, deferred at the
+  user's request. This record accompanies the fix commit; locate its hash with
+  `git log --oneline -- apps/extension/src/selection.ts`.
+
 ## Step record: 2026-10-04 Edge investigation and plan
 
 - Outcome: added the [Edge compatibility plan](edge-compatibility-plan.md).
