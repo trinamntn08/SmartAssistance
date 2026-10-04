@@ -22,6 +22,9 @@ First-opening translation waits for visible-panel readiness as described in
 [ADR-0011](../decisions/0011-initial-reading-readiness.md).
 Reading now runs on Chrome's local models under
 [ADR-0013](../decisions/0013-chrome-local-reading-translation.md).
+Rendered reading capture and open-shadow selection validation are refined by
+[ADR-0014](../decisions/0014-copyable-reading-selections.md) and
+[ADR-0015](../decisions/0015-shadow-reading-selections.md).
 
 ## Principles
 

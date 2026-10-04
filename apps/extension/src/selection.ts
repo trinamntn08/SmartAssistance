@@ -55,6 +55,67 @@ function selectedField(
     : undefined;
 }
 
+function insideField(element: Element, excludeWriting: boolean): boolean {
+  for (let current: Element | null = element; current; current = parentAcrossShadowRoot(current)) {
+    if (
+      current.matches("input, textarea, select") ||
+      (excludeWriting && current.hasAttribute("contenteditable"))
+    )
+      return true;
+  }
+  return false;
+}
+
+function selectionRanges(documentValue: Document, selection: Selection): Range[] | undefined {
+  // Mouse selections inside shadow DOM can have rendered text while the document
+  // selection reports a collapsed, retargeted range. Inspect open roots only;
+  // never substitute a host's textContent for the selected payload.
+  const roots: ShadowRoot[] = [];
+  const pending: ParentNode[] = [documentValue];
+  while (pending.length) {
+    const scope = pending.pop();
+    if (!scope) break;
+    for (const element of scope.querySelectorAll("*")) {
+      if (element.shadowRoot) {
+        roots.push(element.shadowRoot);
+        pending.push(element.shadowRoot);
+      }
+    }
+  }
+  const composed = selection as Selection & {
+    getComposedRanges?: (options: { shadowRoots: ShadowRoot[] }) => StaticRange[];
+  };
+  if (typeof composed.getComposedRanges === "function") {
+    const ranges: Range[] = [];
+    for (const value of composed.getComposedRanges({ shadowRoots: roots })) {
+      const scope = value.startContainer.getRootNode();
+      // A Range cannot safely validate endpoints in different trees, or a
+      // closed-root selection that has been expanded to its surrounding host.
+      if (
+        scope !== value.endContainer.getRootNode() ||
+        (selection.isCollapsed && scope === documentValue)
+      )
+        return undefined;
+      const range = documentValue.createRange();
+      range.setStart(value.startContainer, value.startOffset);
+      range.setEnd(value.endContainer, value.endOffset);
+      if (!range.collapsed) ranges.push(range);
+    }
+    return ranges;
+  }
+  // Older Chromium versions expose a root-scoped selection instead.
+  for (const root of roots.reverse()) {
+    const scoped = (
+      root as ShadowRoot & { getSelection?: () => Selection | null }
+    ).getSelection?.();
+    if (scoped && !scoped.isCollapsed && scoped.rangeCount)
+      return Array.from({ length: scoped.rangeCount }, (_, index) => scoped.getRangeAt(index));
+  }
+  return selection.isCollapsed
+    ? []
+    : Array.from({ length: selection.rangeCount }, (_, index) => selection.getRangeAt(index));
+}
+
 // Read only the explicit DOM selection; never read surrounding page text.
 export function captureSelection(
   documentValue: Document = document,
@@ -74,40 +135,54 @@ export function captureSelection(
       return captured(field.value.slice(start, end));
   }
   const selection = documentValue.getSelection();
-  if (!selection || selection.isCollapsed || selection.rangeCount === 0)
-    return { ok: true, empty: true };
+  if (!selection || selection.rangeCount === 0) return { ok: true, empty: true };
   const text = selection.toString();
   // Chromium returns rendered text here; Range.toString()/textContent would
   // include hidden descendants and must not be used as a capture fallback.
   if (!text.trim()) return { ok: true, empty: true };
   if (text.length > MAX_REWRITE_CHARACTERS) return captured(text);
-  for (let index = 0; index < selection.rangeCount; index += 1) {
-    const range = selection.getRangeAt(index);
+  const ranges = selectionRanges(documentValue, selection);
+  if (!ranges) return unavailable();
+  if (!ranges.length) return { ok: true, empty: true };
+  let validatedText = "";
+  for (const range of ranges) {
     const root = range.commonAncestorContainer;
-    const parent = root.nodeType === Node.ELEMENT_NODE ? (root as Element) : root.parentElement;
-    if (
-      !parent ||
-      excluded(parent) ||
-      parent.closest("input, textarea, select") ||
-      (excludeWriting && parent.closest("[contenteditable]"))
-    )
-      return unavailable();
+    const parent =
+      root instanceof ShadowRoot
+        ? root.host
+        : root.nodeType === Node.ELEMENT_NODE
+          ? (root as Element)
+          : root.parentElement;
+    if (!parent || excluded(parent) || insideField(parent, excludeWriting)) return unavailable();
     const walker = documentValue.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-    let node = walker.nextNode();
+    let node: Node | null = root.nodeType === Node.TEXT_NODE ? root : walker.nextNode();
     while (node) {
       const element = node.parentElement;
       if (
         range.intersectsNode(node) &&
         node.textContent &&
         element &&
-        !element.closest("input, textarea, select") &&
+        !insideField(element, false) &&
         !visuallyHidden(element) &&
-        (excluded(element) || (excludeWriting && element.closest("[contenteditable]")))
+        (excluded(element) || (excludeWriting && insideField(element, true)))
       )
         return unavailable();
+      if (
+        element &&
+        range.intersectsNode(node) &&
+        !insideField(element, false) &&
+        !visuallyHidden(element)
+      ) {
+        const start = range.startContainer === node ? range.startOffset : 0;
+        const end = range.endContainer === node ? range.endOffset : (node.textContent?.length ?? 0);
+        validatedText += node.textContent?.slice(start, end) ?? "";
+      }
       node = walker.nextNode();
     }
   }
+  // Rendered separators can differ from DOM whitespace. All other payload
+  // characters must come from inspected text rather than an opaque shadow host.
+  if (validatedText.replace(/\s/g, "") !== text.replace(/\s/g, "")) return unavailable();
   return captured(text);
 }
 

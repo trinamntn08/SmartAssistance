@@ -4,6 +4,34 @@ Snapshot: 2026-10-04. The local MVP is implemented. Public release is not comple
 The [product brief](product/PROJECT_BRIEF.md) defines the target requirements;
 the [architecture overview](architecture/README.md) describes the current code.
 
+## Step record: 2026-10-04 fix mouse-selected shadow article capture
+
+- Outcome: reproduced the Edge empty-capture error with a real mouse selection
+  in nested open shadow roots. Rendered text was nonempty but the document
+  selection was collapsed and retargeted to BODY. Capture now resolves composed
+  or root-scoped ranges and validates ancestry across hosts. Sibling shadow
+  paragraphs work; opaque/unverifiable payload is rejected. No permission,
+  clipboard, cloud-fallback, or retention change. Added ADR-0015 and setup notes.
+- Validation: final `npm run check` passed formatting, lint, type checks, 279 unit
+  tests, workspace builds, and 32 Chromium workflows. One additional opaque-root
+  browser case was then added; final formatting, lint, type checks, and
+  `npm run test:browser -- --grep "opaque shadow"` passed. Both new browser cases
+  passed on Edge via `npx playwright test --config tmp/edge-test.config.ts --grep
+  'mouse-selected|opaque shadow'` (21.8s). The original isolated Edge reproducer
+  changed from empty capture to successful capture of the same 35 selected
+  characters. `git diff --check` passed.
+- Fixture correction: the first opaque-root test used programmatic selection,
+  which omitted shadow text and failed its setup assertion. Replaced it with a
+  mouse-drag fixture; Chromium and Edge now both verify rejection. Read-only
+  review found the sibling-root handling gap; it was fixed and regression-tested.
+- Build: rebuilt `apps/extension/dist` directly again at the user's request;
+  `npm run build --workspace @smartassistance/extension` passed. Generated files
+  remain ignored. Reload the extension and refresh the webpage before retesting.
+- Follow-up: native MSN user retest and real Edge translation-model availability
+  remain pending. Cross-tree and closed-root selections, and CSS transformations
+  whose rendered characters cannot be reconciled with inspected text, are safely
+  rejected. Fake-model tests do not establish translation quality.
+
 ## Investigation record: 2026-10-04 Edge MSN capture error
 
 - Outcome: traced the reported message to capture, before local translation.

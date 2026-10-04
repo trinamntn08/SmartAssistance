@@ -10,6 +10,8 @@ To translate while reading, select visible text, right-click, and choose
 in ordinary text inputs and read-only textareas.
 Visible text remains eligible when a site marks it as accessibility-hidden or
 read-only; hidden widgets inside a passage do not block its visible selection.
+Mouse-selected passages inside open shadow DOM, including nested article components,
+are supported. Closed or cross-tree selections that cannot be validated are excluded.
 Password, payment, verification-code, hidden, inert, and disabled fields remain excluded.
 Reading translation runs locally in Chrome,
 using Vietnamese by default or your saved language after enabling local reading.

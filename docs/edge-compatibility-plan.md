@@ -97,10 +97,12 @@ also has version 0.1.1, so that version alone cannot identify a current build.
 This older archive did not contain the exact reported error either; it is a
 potential installation issue, not a confirmed explanation of the user's failure.
 
-An isolated Edge test on the reported MSN article captured a programmatically
-selected shadow-DOM paragraph through the complete extension capture pipeline.
-This does not reproduce the user's native sidebar/context-menu interaction or
-establish that all MSN selections work. The failure remains under investigation.
+Programmatically selected MSN text initially passed capture, but a mouse-drag
+fixture subsequently reproduced the failure in nested open shadow roots: rendered
+text was nonempty while the document selection was reported collapsed. Capture
+now resolves the actual shadow range; see [ADR-0015](decisions/0015-shadow-reading-selections.md).
+This is distinct from model availability. Retest the native MSN sidebar interaction
+after rebuilding, reloading the extension, and refreshing the article.
 
 ### 1. Native Edge feasibility and go/no-go
 

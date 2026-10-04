@@ -18,6 +18,64 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 describe("selected page text", () => {
+  it.each(["visible", "sensitive", "writing"])(
+    "resolves a collapsed document selection into an open shadow range: %s",
+    (kind) => {
+      const host = document.createElement("div");
+      if (kind === "sensitive") host.setAttribute("autocomplete", "cc-number");
+      if (kind === "writing") host.setAttribute("contenteditable", "true");
+      document.body.append(host);
+      const root = host.attachShadow({ mode: "open" });
+      root.innerHTML = "<p>Outside Bonjour Outside</p>";
+      const node = root.querySelector("p")?.firstChild;
+      if (!node) throw new Error("Missing shadow text");
+      const range = document.createRange();
+      range.setStart(node, 8);
+      range.setEnd(node, 15);
+      const composed = vi.fn(() => [range]);
+      vi.spyOn(document, "getSelection").mockReturnValue({
+        isCollapsed: true,
+        rangeCount: 1,
+        toString: () => "Bonjour",
+        getComposedRanges: composed,
+      } as unknown as Selection);
+      expect(captureSelection(document, true)).toMatchObject(
+        kind === "visible"
+          ? { ok: true, draft: { text: "Bonjour" } }
+          : { ok: false, code: "INVALID_REQUEST" },
+      );
+      expect(composed).toHaveBeenCalledWith({ shadowRoots: [root] });
+    },
+  );
+  it("does not accept a collapsed shadow selection rescoped to a closed host", () => {
+    document.body.innerHTML = "<div></div>";
+    const range = document.createRange();
+    range.selectNodeContents(document.body);
+    vi.spyOn(document, "getSelection").mockReturnValue({
+      isCollapsed: true,
+      rangeCount: 1,
+      toString: () => "Synthetic closed text",
+      getComposedRanges: () => [range],
+    } as unknown as Selection);
+    expect(captureSelection()).toMatchObject({ ok: false, code: "INVALID_REQUEST" });
+  });
+  it("uses a root-scoped selection when composed ranges are unavailable", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = host.attachShadow({ mode: "open" });
+    root.innerHTML = "<p>Bonjour</p>";
+    const range = document.createRange();
+    range.selectNodeContents(root.querySelector("p") as Element);
+    Object.defineProperty(root, "getSelection", {
+      value: () => ({ isCollapsed: false, rangeCount: 1, getRangeAt: () => range }),
+    });
+    vi.spyOn(document, "getSelection").mockReturnValue({
+      isCollapsed: true,
+      rangeCount: 1,
+      toString: () => "Bonjour",
+    } as unknown as Selection);
+    expect(captureSelection()).toMatchObject({ ok: true, draft: { text: "Bonjour" } });
+  });
   it("reads only selected text, without creating a replaceable editor snapshot", async () => {
     document.body.innerHTML =
       '<p>Surrounding synthetic text</p><p id="chosen">Bonjour <b>Marie</b>, 42!</p>';
@@ -36,6 +94,33 @@ describe("selected page text", () => {
   it("does not fall back to reading the page without a selection", () => {
     document.body.innerHTML = "Synthetic article";
     expect(captureSelection()).toEqual({ ok: true, empty: true });
+  });
+  it("rejects rendered payload from opaque text that its range cannot inspect", () => {
+    document.body.innerHTML = '<p id="chosen">Public <span></span></p>';
+    selectContents("#chosen");
+    const selection = document.getSelection();
+    if (!selection) throw new Error("Missing selection");
+    vi.spyOn(selection, "toString").mockReturnValue("Public synthetic opaque secret");
+    expect(captureSelection()).toMatchObject({ ok: false, code: "INVALID_REQUEST" });
+  });
+  it("validates sibling paragraphs through their shared shadow root", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = host.attachShadow({ mode: "open" });
+    root.innerHTML = "<p>Bonjour</p><p>monde</p>";
+    const first = root.firstChild?.firstChild;
+    const last = root.lastChild?.firstChild;
+    if (!first || !last) throw new Error("Missing shadow paragraphs");
+    const range = document.createRange();
+    range.setStart(first, 0);
+    range.setEnd(last, 5);
+    vi.spyOn(document, "getSelection").mockReturnValue({
+      isCollapsed: true,
+      rangeCount: 1,
+      toString: () => "Bonjour\nmonde",
+      getComposedRanges: () => [range],
+    } as unknown as Selection);
+    expect(captureSelection()).toMatchObject({ ok: true, draft: { text: "Bonjour\nmonde" } });
   });
   it("captures a partial passage", () => {
     document.body.textContent = "Outside Bonjour Outside";

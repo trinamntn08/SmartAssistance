@@ -271,6 +271,66 @@ test("reading accepts copyable rendered text across hidden widgets and accessibi
   expect(app.calls).toBe(0);
 });
 
+test("mouse-selected shadow headline translates despite collapsed document selection", async ({
+  app,
+}) => {
+  await app.editor.bringToFront();
+  await app.editor.evaluate(() => {
+    document.body.innerHTML = '<div id="shadow-article"></div>';
+    const outer = document.querySelector("#shadow-article")?.attachShadow({ mode: "open" });
+    if (!outer) throw new Error("Missing article");
+    outer.innerHTML = "<div></div>";
+    const inner = outer.querySelector("div")?.attachShadow({ mode: "open" });
+    if (!inner) throw new Error("Missing inner article");
+    inner.innerHTML =
+      '<h1 style="width:650px;font:30px Arial;margin:50px">Bonjour synthetic article headline inside nested shadow DOM.</h1>';
+  });
+  const box = await app.editor.locator("h1").boundingBox();
+  if (!box) throw new Error("Missing headline bounds");
+  await app.editor.mouse.move(box.x + 2, box.y + 12);
+  await app.editor.mouse.down();
+  await app.editor.mouse.move(box.x + 450, box.y + 12, { steps: 12 });
+  await app.editor.mouse.up();
+  const selected = await app.editor.evaluate(() => ({
+    text: document.getSelection()?.toString(),
+    collapsed: document.getSelection()?.isCollapsed,
+  }));
+  expect(selected.text).toContain("Bonjour");
+  expect(selected.collapsed).toBe(true);
+  expect(await app.send({ type: "CAPTURE_ACTIVE_SELECTION" })).toMatchObject({ ok: true });
+  expect(await app.state()).toMatchObject({ source: "selection", draft: { text: selected.text } });
+  await accept(app);
+  await expect(app.panel.locator("#preview")).toHaveValue(app.output);
+  expect(app.calls).toBe(0);
+  await app.editor.evaluate(() =>
+    document.querySelector("#shadow-article")?.setAttribute("autocomplete", "cc-number"),
+  );
+  expect(await app.send({ type: "CAPTURE_ACTIVE_SELECTION" })).toMatchObject({ ok: false });
+});
+
+test("reading refuses rendered text hidden behind an opaque shadow boundary", async ({ app }) => {
+  await app.editor.bringToFront();
+  await app.editor.evaluate(() => {
+    document.body.innerHTML =
+      '<div id="opaque" style="display:block;width:650px;font:30px Arial;margin:50px"></div>';
+    const root = document.querySelector("#opaque")?.attachShadow({ mode: "closed" });
+    if (!root) throw new Error("Missing opaque fixture");
+    root.innerHTML =
+      '<p style="margin:0" autocomplete="cc-number">SYNTHETIC SECRET hidden inside opaque shadow DOM.</p>';
+  });
+  const box = await app.editor.locator("#opaque").boundingBox();
+  if (!box) throw new Error("Missing opaque bounds");
+  await app.editor.mouse.move(box.x + 2, box.y + 12);
+  await app.editor.mouse.down();
+  await app.editor.mouse.move(box.x + 450, box.y + 12, { steps: 12 });
+  await app.editor.mouse.up();
+  const selected = await app.editor.evaluate(() => document.getSelection()?.toString());
+  expect(selected).toContain("SYNTHETIC SECRET");
+  expect(await app.send({ type: "CAPTURE_ACTIVE_SELECTION" })).toMatchObject({ ok: false });
+  expect(await app.localCalls()).toBe(0);
+  expect(app.calls).toBe(0);
+});
+
 test("explicit reading translates only selected read-only field text without enabling writing", async ({
   app,
 }) => {
