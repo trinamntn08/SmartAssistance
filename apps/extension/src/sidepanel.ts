@@ -749,10 +749,6 @@ elementById("copy").addEventListener("click", () => {
     .then(() => showStatus("Preview copied."))
     .catch(() => showStatus("Clipboard access was denied.", true));
 });
-elementById("recapture").addEventListener("click", () => {
-  stopPlayback();
-  void sendRequest({ type: "CAPTURE_ACTIVE_TEXT" }).then(showFailure);
-});
 elementById("accept-privacy").addEventListener("click", () => {
   void sendRequest({ type: "ACCEPT_PRIVACY_NOTICE" }).then((response) => {
     if (!showFailure(response)) {

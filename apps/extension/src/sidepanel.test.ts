@@ -169,6 +169,10 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe("preview identity and event ordering", () => {
+  it("loads without the retired Recapture control or a panel capture action", () => {
+    expect(document.getElementById("recapture")).toBeNull();
+    expect(send.mock.calls.some(([request]) => request.type === "CAPTURE_ACTIVE_TEXT")).toBe(false);
+  });
   it("requires local acknowledgement even when cloud writing was already consented", () => {
     changed({ [LOCAL_READING_CONSENT_KEY]: { newValue: undefined } }, "local");
     emit({ ...ready(), source: "selection", autoTranslate: true });

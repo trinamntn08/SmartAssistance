@@ -2,10 +2,18 @@
 
 This guide uses PowerShell and the checkout at
 `D:\dev\projects\SmartAssistance`. Substitute your checkout path if different.
-SmartAssistance has two running parts: Chrome runs the extension, and a local
-Node.js API receives rewrite requests and calls the model provider. Building
+Chrome runs the extension and local reading translation. Cloud writing also uses
+a Node.js API that receives rewrite requests and calls the model provider. Building
 creates files; starting the API makes rewriting available. There is no desktop
 installer or executable to launch for the extension.
+
+For reading only, complete dependency installation (steps 1-3), build (step 5),
+and load the extension (step 7). Skip API configuration and startup. Use desktop
+Chrome 138+ with available local models, select text, and invoke
+**Translate with SmartAssistance** or the toolbar icon. Accept **Enable local reading**
+and click **Enable local translation** if setup is needed. See
+[local translation verification](local-translation-verification.md) for setup and
+remaining device checks. No API key or running backend is required for reading.
 
 ## 1. Choose the isolation you need
 

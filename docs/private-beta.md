@@ -5,6 +5,10 @@ release: the extension embeds one shared bearer token, which an installer can
 extract. Use only with a small private tester list and a low OpenAI project
 budget. See [ADR-0004](decisions/0004-private-beta-shared-token.md).
 
+This hosted API and shared token support cloud writing. Reading translation runs
+locally in desktop Chrome 138+ with available models and needs no backend or token;
+see [local reading setup](local-translation-verification.md).
+
 ## What you need
 
 - A GitHub repository containing this project.

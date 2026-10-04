@@ -130,11 +130,6 @@ button:disabled {
   color: #26344f;
 }
 
-.compact {
-  min-height: 32px;
-  padding: 5px 9px;
-}
-
 .status,
 .notice,
 footer {

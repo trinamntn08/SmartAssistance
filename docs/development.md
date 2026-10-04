@@ -16,8 +16,8 @@ tracked in [implementation status](status.md).
 
 1. Clone the repository.
 2. Run `npm ci`.
-3. Copy `.env.example` to `.env` and set `OPENAI_API_KEY` for live rewrites.
-4. Run `npm run dev:api` in one terminal.
+3. For cloud writing, copy `.env.example` to `.env` and set `OPENAI_API_KEY`.
+4. For cloud writing, run `npm run dev:api` in one terminal.
 5. Run `npm run dev:extension` in another terminal.
 6. Open `chrome://extensions`, enable Developer mode, choose **Load unpacked**,
    and select `apps/extension/dist`.
@@ -117,7 +117,9 @@ particular composer is supported. See
 [ADR-0003](decisions/0003-managed-editor-native-insertion.md).
 
 - Verify input, textarea, and contenteditable fields.
-- Verify disabled, read-only, password, and unsupported fields are rejected.
+- Verify disabled, read-only, password, and unsupported fields reject writing
+  capture. Explicit reading may translate a selected substring in an ordinary
+  read-only input or textarea; sensitive and unavailable fields remain excluded.
 - Start a rewrite, change the source field, then confirm Replace is refused.
 - Verify preview, copy, replace, and undo through keyboard-only navigation.
 - Confirm rich-text fields show the plain-text replacement warning.

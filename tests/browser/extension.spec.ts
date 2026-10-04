@@ -213,7 +213,7 @@ test("selected text shows original and translation without Copy and remembers la
   app,
 }, testInfo) => {
   await app.panel.setViewportSize({ width: 400, height: 800 });
-  await expect(app.panel.locator("#recapture")).toBeHidden();
+  await expect(app.panel.locator("#recapture")).toHaveCount(0);
   await app.editor.bringToFront();
   await app.editor.locator("#article").evaluate((element) => {
     const range = document.createRange();

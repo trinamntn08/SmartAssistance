@@ -59,7 +59,7 @@ Device speech services provide the voices; availability and quality vary.
 - Chrome session storage contains one current draft and its interaction metadata.
   Previews live in panel memory; the content script temporarily retains an undo
   value and original editor nodes. None is written to local or synced storage.
-- A capture expires ten minutes after capture. Recapture, navigation, source-tab
+- A capture expires ten minutes after capture. Capturing new text, navigation, source-tab
   closure, and Clear text and consent invalidate and clear it. Chrome may defer
   alarms or timers while suspended; expiry checks prevent reuse, and cleanup runs
   when the extension resumes execution. Closing a panel alone does not end the
@@ -77,7 +77,9 @@ Device speech services provide the voices; availability and quality vary.
   corpus, with aggregate and case-ID metadata reports that omit generated text.
 
 Password inputs, payment autocomplete fields, one-time codes, hidden/inert,
-disabled, and read-only editors are excluded. This is not a general detector for
+and disabled fields are excluded. Read-only editors are excluded from writing;
+explicit reading can capture only the selected substring of an ordinary text
+input or textarea. This is not a general detector for
 every kind of sensitive text: users choose whether an otherwise eligible draft
 may be sent. Site-specific widgets outside the supported editor scope are not
 covered by these guarantees.

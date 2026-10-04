@@ -2,7 +2,7 @@
 
 Status: Accepted for MVP
 
-Implementation status (2026-09-05): the local MVP is implemented; public-release
+Implementation status (2026-10-04): the local MVP is implemented; public-release
 requirements remain open. This brief describes the target product, not a claim
 that every requirement has shipped. See [current status](../status.md) for
 implemented capabilities, verification evidence, and outstanding work.

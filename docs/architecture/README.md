@@ -207,7 +207,7 @@ text, never interpreted as HTML or code.
 ## Data ownership and retention
 
 - The single current draft uses Chrome session storage; previews remain in panel
-  memory and editor undo data in the content script. Recapture, navigation, source
+  memory and editor undo data in the content script. New captures, navigation, source
   tab closure, clearing, and expiry invalidate the interaction and clear its state.
 - A Chrome alarm supports cleanup while the MV3 worker is suspended. Absolute expiry
   is also checked before use; physical cleanup resumes when Chrome schedules work.
@@ -230,10 +230,13 @@ text, never interpreted as HTML or code.
 | `POST /v1/rewrites` | Accepts JSON containing only `text`, `operation`, optional `tone`, and `targetLanguage`; returns `rewrittenText`, `requestId`, and `model`. |
 | `OPTIONS` | Returns CORS preflight headers for an allowed origin. |
 
-Operations are `grammar` and `improve`. Grammar correction does not accept a
+Operations are `grammar`, `improve`, and `translate`. Backend translation remains
+available in the API contract, but extension reading uses local models and rejects
+the selection-to-cloud route. Grammar correction does not accept a
 tone and preserves the draft's existing style. Writing improvement requires a
-`natural` or `formal` tone. The target is `same` or a language tag such as
-`fr-FR`; choosing another language translates the selected result. Input is limited to 10,000
+`natural` or `formal` tone. Backend translation forbids tone and requires an
+explicit target language. Writing accepts `same` or a language tag such as
+`fr-FR`; choosing another language translates the rewritten draft. Input is limited to 10,000
 JavaScript string code units, output to 20,000. Unknown request fields are rejected.
 `detectedLanguage` is optional in the contract but the current adapter does not
 populate it; source-language handling is delegated to the rewrite instructions.
@@ -303,7 +306,9 @@ and generate its host permission; changing it requires rebuilding and reloading.
 The API loads `.env` through its development command, while extension builds use
 the shell environment. See [development configuration](../development.md).
 Build output is generated under workspace `dist` directories and ignored by Git.
-There is no committed container image definition or production deployment stack.
+The committed `render.yaml` blueprint supports a bounded private beta; see the
+[private beta guide](../private-beta.md). There is no committed container image
+definition or complete public-release infrastructure.
 A hosted deployment still needs TLS termination, secret injection, operational
 monitoring, and content-safe proxy/log configuration. Scaling API replicas also
 requires shared quota accounting to maintain a global or per-user budget.

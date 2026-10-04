@@ -21,7 +21,7 @@ The side panel shows the original selection and its translation, each with a
 sound icon. It does not offer Copy/Replace in reading mode. The
 language is remembered locally. Without a selection, the toolbar keeps the
 focused-editor writing workflow. Writing requires separate cloud consent before
-sending text. The panel's Recapture button is hidden; click the extension icon
+sending text. Click the extension icon
 to capture text again. Reading needs no API key or running backend and has no paid fallback.
 Original text is collapsed by default so the translation gets more space. Click
 **Original** to expand or collapse it; a new passage starts collapsed again.
@@ -69,8 +69,9 @@ interfaces, lifecycle, security boundaries, and deployment.
 
 1. Install Node.js 24 LTS.
 2. Run `npm ci`.
-3. Copy `.env.example` to `.env` and add an OpenAI API key.
-4. Run `npm run dev:api` and `npm run dev:extension`.
+3. Run `npm run dev:extension`.
+4. For cloud writing, copy `.env.example` to `.env`, add an OpenAI API key,
+   and run `npm run dev:api`. Local reading needs only the extension.
 5. Load `apps/extension/dist` as an unpacked Chrome extension.
 
 See [the development guide](docs/development.md) for the complete workflow.

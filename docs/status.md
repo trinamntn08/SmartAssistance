@@ -4,6 +4,25 @@ Snapshot: 2026-10-04. The local MVP is implemented. Public release is not comple
 The [product brief](product/PROJECT_BRIEF.md) defines the target requirements;
 the [architecture overview](architecture/README.md) describes the current code.
 
+## Step record: 2026-10-04 documentation and unused-control cleanup
+
+- Outcome: removed the retired Recapture markup, click handler, and its unused
+  compact CSS. Capture through the toolbar remains supported. Unit and browser
+  assertions cover panel startup without the control.
+- Documentation: clarified reading-only setup without an API/key, read-only
+  selection support, retained backend translation, and the existing Render beta
+  blueprint. Replaced the completed local-translation implementation checklist
+  with a current summary and remaining verification work. Kept relevant Edge
+  investigation, ADRs, and historical status evidence.
+- Validation: `npm run format` and full `npm run check` passed: formatting, lint,
+  type checks, 272 unit tests, workspace builds, and 31 Chromium workflows.
+  The final notice wording was rebuilt with `npm run build`; final
+  `npm run format:check` and `git diff --check` passed. A relative-link audit
+  passed for all 64 links in README and docs. The first link-audit invocation
+  failed due to PowerShell argument quoting; the corrected stdin invocation passed.
+- Follow-up: reload the unpacked extension. Native local-model quality, offline
+  behavior, and device latency verification remain pending as documented.
+
 ## Step record: 2026-10-04 hide Recapture button
 
 - Outcome: hid the side-panel Recapture button using the HTML hidden state.
