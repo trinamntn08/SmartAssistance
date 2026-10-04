@@ -4,6 +4,21 @@ Snapshot: 2026-10-04. The local MVP is implemented. Public release is not comple
 The [product brief](product/PROJECT_BRIEF.md) defines the target requirements;
 the [architecture overview](architecture/README.md) describes the current code.
 
+## Step record: 2026-10-04 local translation planning
+
+- Outcome: added the [Chrome local translation integration plan](local-translation-plan.md)
+  with feasibility, provider adapter, lifecycle/privacy integration, and quality
+  validation checkpoints. Implementation has not started.
+- Proposed policy: local-only reading translation with explicit setup/retry;
+  grammar and writing improvement retain the server provider. No automatic cloud
+  fallback. Actual Chrome side-panel compatibility and bilingual quality remain
+  to be verified in the planned steps.
+- Validation: documentation-only change; `npm run format`, `npm run format:check`,
+  `npm run lint`, and `git diff --check` passed. Runtime tests were not rerun
+  because this step changes only documentation.
+- Commit: this record accompanies the planning commit; locate it with
+  `git log --oneline -- docs/local-translation-plan.md`.
+
 ## Step record: 2026-10-04 current-state snapshot
 
 - Outcome: checkpoint the current reading translation, active-reading, local
