@@ -4,6 +4,19 @@ Snapshot: 2026-10-04. The local MVP is implemented. Public release is not comple
 The [product brief](product/PROJECT_BRIEF.md) defines the target requirements;
 the [architecture overview](architecture/README.md) describes the current code.
 
+## Step record: 2026-10-04 translation progress wording
+
+- Outcome: reading progress now consistently displays `Translating...`, including
+  model setup and download callbacks. Removed browser-specific download status
+  wording that could linger during translation. Updated verification/setup notes
+  and the existing setup-progress assertion.
+- Validation: `npm run format` and the complete `npm run check` passed:
+  formatting, lint, type checks, 287 unit tests, all workspace builds, and all
+  34 Chromium workflows. `git diff --check` passed. Rebuilt the extension directly
+  in `apps/extension/dist`; generated output remains ignored.
+- Follow-up: reload the extension to see the new status. First-use model downloads
+  can still take time; native Edge model availability/quality checks remain open.
+
 ## Step record: 2026-10-04 reliable local detection fallback
 
 - Outcome: uncertain reading language results now consult the existing local

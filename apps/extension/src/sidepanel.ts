@@ -534,7 +534,7 @@ async function runLocalGeneration(state: ReadyDraftState, targetLanguage: string
   localRetry = false;
   busy = true;
   updateControls();
-  showStatus("Translating on this device...");
+  showStatus("Translating...");
   const current = () =>
     localAttempt === attempt &&
     !attempt.controller.signal.aborted &&

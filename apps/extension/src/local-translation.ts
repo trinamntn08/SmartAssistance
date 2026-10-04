@@ -225,14 +225,14 @@ export function createLocalTranslation(
         throw new LocalTranslationError("FAILED");
       }
       if (!platform?.isUserActive()) throw new LocalTranslationError("SETUP_REQUIRED");
-      onProgress("Chrome is downloading local language models. This may take a few minutes.");
+      onProgress("Translating...");
       return SETUP_MS;
     }
     const options: CreateOptions = {
       signal: operation.signal,
       monitor: (monitor) =>
         monitor.addEventListener("downloadprogress", () => {
-          if (active()) onProgress("Chrome is downloading local language models.");
+          if (active()) onProgress("Translating...");
         }),
     };
     try {

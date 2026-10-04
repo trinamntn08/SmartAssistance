@@ -198,6 +198,7 @@ describe("local translation adapter", () => {
     platform.isUserActive.mockReturnValue(true);
     await adapter.translate("Hello", "vi", controller.signal);
     expect(progress).toHaveBeenCalled();
+    expect(progress.mock.calls.every(([message]) => message === "Translating...")).toBe(true);
   });
   it("checks user activation again when translator creation needs a download", async () => {
     const { adapter, platform, controller } = setup();

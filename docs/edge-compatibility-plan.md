@@ -130,7 +130,7 @@ then update the product brief's browser scope and declared support matrix.
 Keep a single codebase and shared manifest wherever feasible. Verify the current
 minimum-version key in Edge; do not invent an undocumented Edge-specific key.
 Use feature detection for models/sidebar capabilities. Adjust browser-specific
-messages such as "Chrome is downloading" to match Edge or use neutral wording.
+messages should use browser-neutral wording. Reading progress now uses "Translating...".
 Keep local-only voices: Edge can expose voices that are not local and must not be
 selected as a fallback. Verify `chrome.i18n.detectLanguage` used for source speech.
 

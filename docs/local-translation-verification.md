@@ -14,7 +14,8 @@ See [ADR-0013](decisions/0013-chrome-local-reading-translation.md).
 3. If prompted, click **Enable local translation** inside the panel. Chrome may
    download the detector and language packs. If detection finishes after the
    gesture expires, click again to prepare the translation pair. The progress
-   message describes downloading; Cancel stops the extension's wait, but Chrome
+   message stays **Translating...** throughout setup and translation; Cancel stops
+   the extension's wait, but the browser
    may continue its own download.
 4. Once ready, new selections and target-language changes translate automatically.
    Errors offer **Retry local translation**. If unavailable, update Chrome/check
