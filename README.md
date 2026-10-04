@@ -21,7 +21,8 @@ The side panel shows the original selection and its translation, each with a
 sound icon. It does not offer Copy/Replace in reading mode. The
 language is remembered locally. Without a selection, the toolbar keeps the
 focused-editor writing workflow. Writing requires separate cloud consent before
-sending text. Reading needs no API key or running backend and has no paid fallback.
+sending text. The panel's Recapture button is hidden; click the extension icon
+to capture text again. Reading needs no API key or running backend and has no paid fallback.
 Original text is collapsed by default so the translation gets more space. Click
 **Original** to expand or collapse it; a new passage starts collapsed again.
 Both text areas use compact 14px text and scroll internally. When Original is

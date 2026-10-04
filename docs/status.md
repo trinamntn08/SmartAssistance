@@ -4,6 +4,18 @@ Snapshot: 2026-10-04. The local MVP is implemented. Public release is not comple
 The [product brief](product/PROJECT_BRIEF.md) defines the target requirements;
 the [architecture overview](architecture/README.md) describes the current code.
 
+## Step record: 2026-10-04 hide Recapture button
+
+- Outcome: hid the side-panel Recapture button using the HTML hidden state.
+  The extension icon remains available to capture text again. Updated the README
+  and added a Chromium assertion that the button is hidden.
+- Validation: `npm run format` passed. The initial `npm run check` passed format,
+  lint, and type checks but was blocked at Vitest startup by sandbox `spawn EPERM`.
+  Rerunning with subprocess access passed the full `npm run check`: formatting,
+  lint, type checks, 271 unit tests, workspace builds, and all 31 Chromium workflows.
+  `git diff --check` passed.
+- Follow-up: reload the unpacked extension to see the updated panel.
+
 ## Step record: 2026-10-04 copyable reading selections
 
 - Outcome: fixed reading capture rejecting visually selectable text marked with
