@@ -4,6 +4,27 @@ Snapshot: 2026-10-04. The local MVP is implemented. Public release is not comple
 The [product brief](product/PROJECT_BRIEF.md) defines the target requirements;
 the [architecture overview](architecture/README.md) describes the current code.
 
+## Investigation record: 2026-10-04 Edge MSN capture error
+
+- Outcome: traced the reported message to capture, before local translation.
+  An isolated Edge profile captured a selected shadow-DOM paragraph on the
+  reported public MSN article through the full current extension pipeline.
+  The user's native invocation failure was not reproduced and is not fixed.
+- Installation evidence: the ignored existing beta ZIP is version 0.1.1 but lacks
+  selected-text capture and local reading. It also lacks the exact reported error;
+  an outdated install remains a possibility, not a confirmed cause. Prepared an
+  ignored current-build Edge test ZIP without changing production code or version.
+- Validation: all 31 existing Chromium workflows passed using an ignored copy
+  of the harness with the installed `msedge` channel and isolated profiles
+  (`npx playwright test --config tmp/edge-test.config.ts`, 1.5 minutes). Providers
+  were fake; no real models downloaded or translated, and no user profile changed.
+  `npm run format`, `npm run format:check`, `npm run lint`, and
+  `git diff --check` passed. Only documentation changed; the Chrome gate was not
+  rerun after its prior successful validation.
+- Follow-up: verify the installed folder/build and exact toolbar/context-menu
+  invocation, then reproduce native sidebar selection behavior. Real Edge model
+  availability and quality remain pending. Updated the Edge troubleshooting guide.
+
 ## Step record: 2026-10-04 documentation and unused-control cleanup
 
 - Outcome: removed the retired Recapture markup, click handler, and its unused

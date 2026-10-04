@@ -75,6 +75,33 @@ compatibility, audible speech, live provider quality, or installed model behavio
 
 ## Implementation checkpoints
 
+### Troubleshooting capture before translation
+
+`Select page text or focus a writing field, then try again` is a capture-stage
+error; local translation has not started. Verify that the installed extension
+uses the current build before investigating model availability:
+
+1. Build the current checkout with `npm run build`.
+2. In `edge://extensions`, load `apps/extension/dist` through **Load unpacked**.
+   Disable another SmartAssistance installation while testing to avoid invoking
+   an older copy. Reloading a previously extracted ZIP does not rebuild it.
+3. Refresh the article, select visible text, and use the page context menu's
+   **Translate with SmartAssistance** action. Test the toolbar action separately.
+4. Record the installed folder, invocation method, Edge version, and page URL if
+   capture still fails. Native sidebar behavior needs separate verification from
+   the regular extension-tab browser fixtures.
+
+The ignored `smartassistance-beta.zip` inspected on 2026-10-04 had version 0.1.1
+but no `CAPTURE_SELECTION` or local-reading implementation. The current source
+also has version 0.1.1, so that version alone cannot identify a current build.
+This older archive did not contain the exact reported error either; it is a
+potential installation issue, not a confirmed explanation of the user's failure.
+
+An isolated Edge test on the reported MSN article captured a programmatically
+selected shadow-DOM paragraph through the complete extension capture pipeline.
+This does not reproduce the user's native sidebar/context-menu interaction or
+establish that all MSN selections work. The failure remains under investigation.
+
 ### 1. Native Edge feasibility and go/no-go
 
 Load `apps/extension/dist` through `edge://extensions` with Developer mode and
