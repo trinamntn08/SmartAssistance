@@ -4,6 +4,28 @@ Snapshot: 2026-10-04. The local MVP is implemented. Public release is not comple
 The [product brief](product/PROJECT_BRIEF.md) defines the target requirements;
 the [architecture overview](architecture/README.md) describes the current code.
 
+## Step record: 2026-10-04 Edge investigation and plan
+
+- Outcome: added the [Edge compatibility plan](edge-compatibility-plan.md).
+  Shared-codebase desktop Edge support appears feasible; official support,
+  native verification, packaging, and publication have not been implemented.
+- Evidence: an isolated Windows Edge 154.0.4258.53 extension probe exposed
+  sidePanel/open and both local AI APIs, with a chrome-extension origin. Detector
+  and en->vi / fr->vi availability were unavailable in the headless profile.
+  This does not establish that normal desktop Edge lacks those models.
+- Validation: five existing synthetic browser workflows passed on Edge (15.8s):
+  capture/preview/replace/undo for three editor types, changed-editor protection,
+  and missing-local-API handling without cloud fallback. Temporary diagnostic
+  copies/profiles remain ignored; no production code, user profile, model packs,
+  remote provider, deployment settings, or store listing were changed.
+- Follow-up: actual sidebar gestures/visibility, model downloads and Vietnamese
+  pair availability, offline playback/translation, bilingual quality, latency,
+  complete repeatable Edge coverage, and distribution/origin configuration.
+- Documentation validation: `npm run format`, `npm run format:check`,
+  `npm run lint`, and `git diff --check` passed. No runtime source changed;
+  the full Chrome gate was not rerun. This record accompanies the planning
+  commit; locate it with `git log --oneline -- docs/edge-compatibility-plan.md`.
+
 ## Step record: 2026-10-04 local reading integration and automated verification
 
 - Outcome: reading uses the Chrome local adapter in the side panel, with separate
