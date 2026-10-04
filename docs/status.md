@@ -4,6 +4,38 @@ Snapshot: 2026-10-04. The local MVP is implemented. Public release is not comple
 The [product brief](product/PROJECT_BRIEF.md) defines the target requirements;
 the [architecture overview](architecture/README.md) describes the current code.
 
+## Step record: 2026-10-04 local reading integration and automated verification
+
+- Outcome: reading uses the Chrome local adapter in the side panel, with separate
+  local acknowledgement, explicit setup/retry, content-free worker authorization,
+  and no cloud fallback. Grammar/writing retain their cloud route and consent.
+  Active reading, saved language, pronunciation, and compact panel layout remain.
+- Lifecycle: attempts belong to the authenticated panel document/port and current
+  tab/capture/language; cancellation, teardown, expiry, tab switches, navigation,
+  and consent withdrawal discard stale output. Tab changes clear empty-capture
+  reading scope as well as pending/completed selection captures. Local output is
+  kept only in panel memory. No permissions or dependencies were added.
+- Review: corrected standard detector results containing an `und` uncertainty
+  candidate and the empty-capture tab-scope edge; both have regression coverage.
+  Follow-up read-only review found no remaining confirmed critical findings.
+- Validation: `npm run format` and `npm run check` passed format, lint, workspace
+  and test type checks, 260 Vitest tests across 16 files, all workspace builds,
+  and 29 Chromium workflows. A test-only non-null-assertion warning was removed;
+  the subsequent `npm run lint` passed without findings. Browser reading fixtures
+  assert zero cloud requests and inject local APIs; writing regressions pass.
+  The narrow reading layout screenshot was visually checked. `git diff --check`
+  passed. Initial sandbox build/test subprocess restrictions were resolved by
+  approved execution; they were not code failures.
+- Artifacts: added 50 versioned synthetic quality cases and the
+  [native verification guide](local-translation-verification.md), and updated
+  setup, product, architecture, privacy, and integration-plan documentation.
+- Release gates still open: stable Chrome native side-panel gestures and model
+  downloads, actual offline reuse/playback, bilingual quality review, and measured
+  warmed latency. These cannot be established by fake models or the headless probe.
+  No paid quality comparison, release package, upload, or push was performed.
+- Commit: this record accompanies the integration checkpoint; locate its hash
+  with `git log --oneline -- docs/status.md`.
+
 ## Step record: 2026-10-04 local translation adapter
 
 - Outcome: added the injected Chrome local translation adapter with safe errors,
@@ -63,6 +95,12 @@ the [architecture overview](architecture/README.md) describes the current code.
   `git log --oneline -- docs/status.md` to find its hash.
 
 ## Implemented
+
+- Local reading translation through Chrome Translator and LanguageDetector,
+  independent of the API/key and cloud-writing consent. Setup/retry guidance and
+  deterministic failure states replace automatic paid fallback; see
+  [ADR-0013](decisions/0013-chrome-local-reading-translation.md). Native model
+  compatibility, quality, and latency remain unverified.
 
 - Local pronunciation: one sound icon beside Original and Translation reads that
   area's selected text, or its full passage when nothing is selected. The same

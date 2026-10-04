@@ -245,7 +245,8 @@ body.translation-view #original-section {
 body.translation-view #original-section.expanded {
   flex: 1;
 }
-body.translation-view #cancel {
+body.translation-view #cancel,
+body.translation-view #local-translation-action {
   order: 2;
   flex-shrink: 0;
 }

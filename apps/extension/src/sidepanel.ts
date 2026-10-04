@@ -2,6 +2,8 @@ import { parseRewriteRequest } from "@smartassistance/contracts";
 import {
   ACTIVE_DRAFT_STORAGE_KEY,
   PRIVACY_CONSENT_KEY,
+  LOCAL_READING_CONSENT_KEY,
+  LOCAL_READING_NOTICE_VERSION,
   TRANSLATION_LANGUAGE_KEY,
   READING_PORT_NAME,
   READING_READY_MESSAGE,
@@ -15,6 +17,11 @@ import {
 } from "./messages.js";
 import "./sidepanel.css";
 import { createPronunciation } from "./pronunciation.js";
+import {
+  browserLocalTranslationPlatform,
+  createLocalTranslation,
+  LocalTranslationError,
+} from "./local-translation.js";
 declare const __SMARTASSISTANCE_API_BASE_URL__: string;
 
 function elementById<T extends HTMLElement>(id: string): T {
@@ -39,6 +46,8 @@ const preview = elementById<HTMLTextAreaElement>("preview");
 const replace = elementById<HTMLButtonElement>("replace");
 const undo = elementById<HTMLButtonElement>("undo");
 const notice = elementById<HTMLElement>("privacy-notice");
+const localNotice = elementById<HTMLElement>("local-reading-notice");
+const localAction = elementById<HTMLButtonElement>("local-translation-action");
 const speechStatus = elementById<HTMLElement>("speech-status");
 const voiceInstall = elementById<HTMLElement>("voice-install");
 const voiceInstructions = elementById<HTMLElement>("voice-install-instructions");
@@ -137,7 +146,7 @@ function stopPlayback(): void {
 }
 function canSpeak(): boolean {
   return (
-    consented &&
+    localConsented &&
     translating() &&
     !panelClosed &&
     document.visibilityState !== "hidden" &&
@@ -215,6 +224,14 @@ let activeState: ReadyDraftState | undefined;
 let previewIdentity: { snapshotId: string; generationId: string } | undefined;
 let pendingGeneration: string | undefined;
 let consented = false;
+let localConsented = false;
+let localConsentRevision = 0;
+let localAttempt:
+  | { snapshotId: string; generationId: string; controller: AbortController; authorized: boolean }
+  | undefined;
+let localProvider: ReturnType<typeof createLocalTranslation> | undefined;
+let localRetry = false;
+let localSetupRequired = false;
 let busy = false;
 let expiryTimer: ReturnType<typeof setTimeout> | undefined;
 let stateRevision = 0;
@@ -232,6 +249,7 @@ let readingPollBusy = false;
 let panelClosed = false;
 function stopReading(): void {
   stopPlayback();
+  stopLocalTranslation(true);
   clearInterval(readingTimer);
   readingTimer = undefined;
   const port = readingPort;
@@ -244,7 +262,7 @@ function stopReading(): void {
   port?.disconnect();
 }
 function syncReading(): void {
-  if (panelClosed || !initialized || !consented || document.visibilityState === "hidden") {
+  if (panelClosed || !initialized || !localConsented || document.visibilityState === "hidden") {
     stopReading();
     return;
   }
@@ -259,6 +277,7 @@ function syncReading(): void {
     });
     port.onDisconnect.addListener(() => {
       if (readingPort === port) {
+        stopLocalTranslation(true);
         readingPort = undefined;
         readingReady = false;
       }
@@ -292,7 +311,7 @@ function maybeTranslateImmediately(): void {
     panelClosed ||
     document.visibilityState === "hidden" ||
     !initialized ||
-    !consented ||
+    !localConsented ||
     !readingReady ||
     busy ||
     !translating() ||
@@ -318,7 +337,8 @@ function showStatus(message: string, error = false): void {
 function updateControls(): void {
   syncReading();
   const translation = translating();
-  document.body.classList.toggle("translation-view", translation && consented);
+  const allowed = translation ? localConsented : consented;
+  document.body.classList.toggle("translation-view", translation && allowed);
   document.body.classList.toggle(
     "translation-running",
     translation && activeState?.phase === "generating",
@@ -338,9 +358,9 @@ function updateControls(): void {
   elementById("copy").hidden = translation;
   replace.hidden = translation;
   preview.readOnly = translation;
-  originalSound.hidden = !translation || !consented;
-  translationSound.hidden = !translation || !consented;
-  speechStatus.hidden = !translation || !consented;
+  originalSound.hidden = !translation || !allowed;
+  translationSound.hidden = !translation || !allowed;
+  speechStatus.hidden = !translation || !allowed;
   translationSound.disabled = !preview.value;
   elementById("feature-label").textContent = translation ? "Translation" : "Writing assistant";
   elementById("language-label").textContent = translation ? "Translate to" : "Output language";
@@ -351,14 +371,20 @@ function updateControls(): void {
   cancel.textContent = translation ? "Cancel translation" : "Cancel rewrite";
   const sameLanguage = language.querySelector<HTMLOptionElement>('option[value="same"]');
   if (sameLanguage) sameLanguage.hidden = translation;
-  notice.hidden = consented;
+  notice.hidden = translation || consented;
+  localNotice.hidden = !translation || localConsented;
+  localAction.hidden = !translation || !localConsented || !localRetry;
+  localAction.disabled = busy;
+  localAction.textContent = localSetupRequired
+    ? "Enable local translation"
+    : "Retry local translation";
   generate.disabled =
-    !consented ||
+    !allowed ||
     !activeState ||
     busy ||
     activeState.phase === "generating" ||
     activeState.phase === "applied";
-  cancel.hidden = activeState?.phase !== "generating";
+  cancel.hidden = activeState?.phase !== "generating" && !localAttempt;
   replace.disabled =
     translation ||
     busy ||
@@ -371,6 +397,8 @@ function updateControls(): void {
 function renderState(state: ActiveDraftState | undefined): void {
   clearTimeout(expiryTimer);
   if (state?.status !== "ready" || state.draft.expiresAt <= Date.now()) {
+    stopLocalTranslation(true);
+    localRetry = false;
     clearSpeechSelection();
     originalExpanded = false;
     stopPlayback();
@@ -394,6 +422,8 @@ function renderState(state: ActiveDraftState | undefined): void {
     return;
   }
   const changed = activeState?.draft.snapshotId !== state.draft.snapshotId;
+  if (changed || (localAttempt?.authorized && state.generationId !== localAttempt.generationId))
+    stopLocalTranslation(false);
   const wasTranslation = translating();
   activeState = state;
   workspace.hidden = false;
@@ -402,6 +432,7 @@ function renderState(state: ActiveDraftState | undefined): void {
   if (changed || wasTranslation !== translating())
     language.value = translating() ? translationLanguage : writingLanguage;
   if (changed) {
+    localRetry = false;
     clearSpeechSelection();
     originalExpanded = false;
     stopPlayback();
@@ -454,6 +485,8 @@ operation.addEventListener("change", () => {
 language.addEventListener("change", () => {
   if (translating()) {
     if (language.value === "same") return;
+    stopLocalTranslation(false);
+    localRetry = false;
     translationLanguageEdited = true;
     translationLanguage = language.value;
     queuedTranslation = activeState
@@ -471,6 +504,113 @@ language.addEventListener("change", () => {
     maybeTranslateImmediately();
   } else writingLanguage = language.value;
 });
+function stopLocalTranslation(dispose: boolean): void {
+  const attempt = localAttempt;
+  localAttempt = undefined;
+  if (attempt) {
+    attempt.controller.abort();
+    pendingGeneration = undefined;
+    busy = false;
+    void sendRequest({
+      type: "CANCEL_REWRITE",
+      snapshotId: attempt.snapshotId,
+      generationId: attempt.generationId,
+    });
+  }
+  if (dispose) {
+    localProvider?.dispose();
+    localProvider = undefined;
+  }
+}
+async function runLocalGeneration(state: ReadyDraftState, targetLanguage: string): Promise<void> {
+  const attempt = {
+    snapshotId: state.draft.snapshotId,
+    generationId: crypto.randomUUID(),
+    controller: new AbortController(),
+    authorized: false,
+  };
+  localAttempt = attempt;
+  pendingGeneration = attempt.generationId;
+  localRetry = false;
+  busy = true;
+  updateControls();
+  showStatus("Translating on this device...");
+  const current = () =>
+    localAttempt === attempt &&
+    !attempt.controller.signal.aborted &&
+    activeState?.draft.snapshotId === attempt.snapshotId &&
+    activeState.draft.expiresAt > Date.now() &&
+    language.value === targetLanguage &&
+    localConsented &&
+    readingReady &&
+    !panelClosed &&
+    document.visibilityState !== "hidden";
+  try {
+    const begun = await sendRequest({
+      type: "BEGIN_LOCAL_TRANSLATION",
+      snapshotId: attempt.snapshotId,
+      generationId: attempt.generationId,
+      targetLanguage,
+    });
+    if (!current()) return;
+    if (!begun.ok || !("localStarted" in begun)) {
+      showFailure(begun);
+      localRetry = true;
+      return;
+    }
+    attempt.authorized = true;
+    localProvider ??= createLocalTranslation(browserLocalTranslationPlatform(), (message) => {
+      if (localAttempt && !localAttempt.controller.signal.aborted) showStatus(message);
+    });
+    const output = await localProvider.translate(
+      state.draft.text,
+      targetLanguage,
+      attempt.controller.signal,
+    );
+    if (!current()) return;
+    const completed = await sendRequest({
+      type: "COMPLETE_LOCAL_TRANSLATION",
+      snapshotId: attempt.snapshotId,
+      generationId: attempt.generationId,
+      targetLanguage,
+    });
+    if (!current()) return;
+    if (!completed.ok || !("localCompleted" in completed)) {
+      showFailure(completed);
+      localRetry = true;
+      return;
+    }
+    previewIdentity = { snapshotId: attempt.snapshotId, generationId: attempt.generationId };
+    if (retainedSelection === preview) clearSpeechSelection();
+    preview.value = output.text;
+    stopPlayback();
+    result.hidden = false;
+    showStatus("Translation ready on this device.");
+  } catch (error) {
+    if (!current()) return;
+    localSetupRequired = error instanceof LocalTranslationError && error.code === "SETUP_REQUIRED";
+    localRetry = true;
+    showStatus(
+      error instanceof LocalTranslationError
+        ? error.message
+        : "Local translation failed. Please retry.",
+      true,
+    );
+    await sendRequest({
+      type: "CANCEL_REWRITE",
+      snapshotId: attempt.snapshotId,
+      generationId: attempt.generationId,
+    });
+  } finally {
+    if (localAttempt === attempt) {
+      localAttempt = undefined;
+      pendingGeneration = undefined;
+      busy = false;
+      updateControls();
+      maybeTranslateImmediately();
+    }
+  }
+}
 function runGeneration(): void {
   if (
     translating() &&
@@ -479,7 +619,7 @@ function runGeneration(): void {
     return;
   if (
     !activeState ||
-    !consented ||
+    !(translating() ? localConsented : consented) ||
     busy ||
     activeState.phase === "generating" ||
     activeState.phase === "applied"
@@ -494,6 +634,10 @@ function runGeneration(): void {
   });
   if (!parsed.success) {
     showStatus(parsed.message, true);
+    return;
+  }
+  if (translating()) {
+    void runLocalGeneration(state, language.value);
     return;
   }
   const identity = { snapshotId: state.draft.snapshotId, generationId: crypto.randomUUID() };
@@ -538,6 +682,15 @@ generate.addEventListener("click", () => {
   if (!translating()) runGeneration();
 });
 cancel.addEventListener("click", () => {
+  if (localAttempt) {
+    queuedTranslation = undefined;
+    stopLocalTranslation(false);
+    localRetry = true;
+    localSetupRequired = false;
+    showStatus("Translation cancelled.");
+    updateControls();
+    return;
+  }
   if (!activeState?.generationId) return;
   pendingGeneration = undefined;
   queuedTranslation = undefined;
@@ -610,9 +763,25 @@ elementById("accept-privacy").addEventListener("click", () => {
     }
   });
 });
+elementById("accept-local-reading").addEventListener("click", () => {
+  void sendRequest({ type: "ACCEPT_LOCAL_READING_NOTICE" }).then((response) => {
+    if (!showFailure(response)) {
+      localConsentRevision += 1;
+      localConsented = true;
+      updateControls();
+      maybeTranslateImmediately();
+    }
+  });
+});
+localAction.addEventListener("click", () => {
+  if (!localConsented || !translating() || busy) return;
+  runGeneration();
+});
 elementById("clear-private-data").addEventListener("click", () => {
   consentRevision += 1;
+  localConsentRevision += 1;
   consented = false;
+  localConsented = false;
   renderState(undefined);
   void sendRequest({ type: "CLEAR_PRIVATE_DATA" }).then((response) => {
     if (!showFailure(response)) showStatus("Captured text cleared and consent withdrawn.");
@@ -632,16 +801,36 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
     updateControls();
     maybeTranslateImmediately();
   }
+  if (areaName === "local" && LOCAL_READING_CONSENT_KEY in changes) {
+    localConsentRevision += 1;
+    localConsented = changes[LOCAL_READING_CONSENT_KEY]?.newValue === LOCAL_READING_NOTICE_VERSION;
+    if (!localConsented && translating()) {
+      previewIdentity = undefined;
+      preview.value = "";
+      result.hidden = true;
+      clearSpeechSelection();
+    }
+    stopPlayback();
+    updateControls();
+    maybeTranslateImmediately();
+  }
 });
 const revision = stateRevision;
 const initialConsentRevision = consentRevision;
+const initialLocalConsentRevision = localConsentRevision;
 void Promise.all([
   chrome.storage.session.get(ACTIVE_DRAFT_STORAGE_KEY),
-  chrome.storage.local.get([PRIVACY_CONSENT_KEY, TRANSLATION_LANGUAGE_KEY]),
+  chrome.storage.local.get([
+    PRIVACY_CONSENT_KEY,
+    LOCAL_READING_CONSENT_KEY,
+    TRANSLATION_LANGUAGE_KEY,
+  ]),
 ])
   .then(([stored, local]) => {
     if (consentRevision === initialConsentRevision)
       consented = local[PRIVACY_CONSENT_KEY] === consentScope(__SMARTASSISTANCE_API_BASE_URL__);
+    if (localConsentRevision === initialLocalConsentRevision)
+      localConsented = local[LOCAL_READING_CONSENT_KEY] === LOCAL_READING_NOTICE_VERSION;
     const savedLanguage: unknown = local[TRANSLATION_LANGUAGE_KEY];
     if (
       typeof savedLanguage === "string" &&

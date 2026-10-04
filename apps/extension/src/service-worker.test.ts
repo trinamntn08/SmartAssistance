@@ -6,6 +6,8 @@ import {
   type ExtensionRequest,
   type ExtensionResponse,
   PRIVACY_CONSENT_KEY,
+  LOCAL_READING_CONSENT_KEY,
+  LOCAL_READING_NOTICE_VERSION,
   type ReadyDraftState,
   SNAPSHOT_TTL_MS,
   READING_READY_MESSAGE,
@@ -40,8 +42,8 @@ function storageArea(values: Record<string, unknown>) {
     set: vi.fn(async (items: Record<string, unknown>) => {
       Object.assign(values, structuredClone(items));
     }),
-    remove: vi.fn(async (key: string) => {
-      delete values[key];
+    remove: vi.fn(async (key: string | string[]) => {
+      for (const entry of Array.isArray(key) ? key : [key]) delete values[entry];
     }),
   };
 }
@@ -51,6 +53,7 @@ async function loadWorker(initial?: unknown, betaApiToken = "") {
     initial === undefined ? {} : { [ACTIVE_DRAFT_STORAGE_KEY]: structuredClone(initial) };
   const localValues: Record<string, unknown> = {
     [PRIVACY_CONSENT_KEY]: consentScope(API_URL),
+    [LOCAL_READING_CONSENT_KEY]: LOCAL_READING_NOTICE_VERSION,
   };
   const browser = {
     storage: { session: storageArea(sessionValues), local: storageArea(localValues) },
@@ -74,6 +77,7 @@ async function loadWorker(initial?: unknown, betaApiToken = "") {
       create: vi.fn(async () => undefined),
     },
     tabs: {
+      onActivated: { addListener: vi.fn() },
       onRemoved: { addListener: vi.fn() },
       onUpdated: { addListener: vi.fn() },
       query: vi.fn(async () => [{ id: 7 }]),
@@ -123,10 +127,11 @@ const runRequest: ExtensionRequest = {
 function connectReader(
   browser: Awaited<ReturnType<typeof loadWorker>>["browser"],
   url = `${EXTENSION_URL}sidepanel.html`,
+  documentId?: string,
 ) {
   const port = {
     name: "active-reading",
-    sender: { id: EXTENSION_ID, url },
+    sender: { id: EXTENSION_ID, url, ...(documentId ? { documentId } : {}) },
     disconnect: vi.fn(),
     postMessage: vi.fn(),
     onDisconnect: { addListener: vi.fn() },
@@ -150,6 +155,13 @@ function pendingFetch(fetchMock: ReturnType<typeof vi.fn<typeof fetch>>): AbortS
   return signals;
 }
 
+const localRequest = {
+  type: "BEGIN_LOCAL_TRANSLATION",
+  snapshotId: "snapshot-a",
+  generationId: "generation-a",
+  targetLanguage: "vi",
+} as const;
+const completeRequest = { ...localRequest, type: "COMPLETE_LOCAL_TRANSLATION" } as const;
 describe("service worker private state and request boundaries", () => {
   it("acknowledges readiness only for authenticated panel connections", async () => {
     const { browser } = await loadWorker();
@@ -183,16 +195,12 @@ describe("service worker private state and request boundaries", () => {
     const { browser, send, fetchMock } = await loadWorker({ ...readyDraft(), source: "selection" });
     connectReader(browser);
     browser.tabs.query.mockResolvedValue([{ id: 8 }]);
-    expect(
-      await send({ ...runRequest, settings: { operation: "translate", targetLanguage: "vi" } }),
-    ).toMatchObject({ ok: false, code: "CANCELLED" });
+    expect(await send(localRequest)).toMatchObject({ ok: false, code: "CANCELLED" });
     expect(fetchMock).not.toHaveBeenCalled();
   });
   it("does not transmit selected text without a connected panel", async () => {
     const { send, fetchMock } = await loadWorker({ ...readyDraft(), source: "selection" });
-    expect(
-      await send({ ...runRequest, settings: { operation: "translate", targetLanguage: "vi" } }),
-    ).toMatchObject({ ok: false, code: "CANCELLED" });
+    expect(await send(localRequest)).toMatchObject({ ok: false, code: "CANCELLED" });
     expect(fetchMock).not.toHaveBeenCalled();
   });
   it("does not replace a writing session with a stale article selection", async () => {
@@ -221,7 +229,7 @@ describe("service worker private state and request boundaries", () => {
     const { browser, send, localValues } = await loadWorker(readyDraft());
     expect(await send({ type: "READ_SELECTION" })).toEqual({ ok: true, unchanged: true });
     const reader = connectReader(browser);
-    delete localValues[PRIVACY_CONSENT_KEY];
+    delete localValues[LOCAL_READING_CONSENT_KEY];
     expect(await send({ type: "READ_SELECTION" })).toEqual({ ok: true, unchanged: true });
     expect(browser.tabs.sendMessage).not.toHaveBeenCalled();
     reader.close();
@@ -259,18 +267,20 @@ describe("service worker private state and request boundaries", () => {
     expect(browser.tabs.sendMessage).toHaveBeenCalledTimes(count);
     expect(fetchMock).not.toHaveBeenCalled();
   });
-  it("aborts a translation when the last reading panel disconnects", async () => {
-    const { browser, send, fetchMock } = await loadWorker({ ...readyDraft(), source: "selection" });
-    const reader = connectReader(browser);
-    const signals = pendingFetch(fetchMock);
-    const response = send({
-      ...runRequest,
-      settings: { operation: "translate", targetLanguage: "vi" },
+  it("cancels the owner panel attempt even when another reader stays connected", async () => {
+    const { browser, send, fetchMock, sessionValues } = await loadWorker({
+      ...readyDraft(),
+      source: "selection",
     });
-    await vi.waitFor(() => expect(signals).toHaveLength(1));
+    const reader = connectReader(browser);
+    connectReader(browser, `${EXTENSION_URL}sidepanel.html`, "other-panel");
+    expect(await send(localRequest)).toEqual({ ok: true, localStarted: true });
     reader.close();
-    expect(await response).toMatchObject({ ok: false, code: "CANCELLED" });
-    expect(signals[0]?.aborted).toBe(true);
+    await vi.waitFor(() =>
+      expect(sessionValues[ACTIVE_DRAFT_STORAGE_KEY]).toMatchObject({ phase: "captured" }),
+    );
+    expect(await send(completeRequest)).toMatchObject({ ok: false, code: "CONFLICT" });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
   it("marks context-menu translation for immediate generation and targets the clicked frame", async () => {
     const { browser, sessionValues, fetchMock } = await loadWorker();
@@ -301,10 +311,15 @@ describe("service worker private state and request boundaries", () => {
       autoTranslate: true,
     });
     connectReader(browser);
-    fetchMock.mockRejectedValueOnce(new Error("Synthetic network failure"));
+    expect(await send(localRequest)).toEqual({ ok: true, localStarted: true });
     expect(
-      await send({ ...runRequest, settings: { operation: "translate", targetLanguage: "vi" } }),
-    ).toMatchObject({ ok: false });
+      await send({
+        type: "CANCEL_REWRITE",
+        snapshotId: "snapshot-a",
+        generationId: "generation-a",
+      }),
+    ).toEqual({ ok: true, cancelled: true });
+    expect(fetchMock).not.toHaveBeenCalled();
     expect(sessionValues[ACTIVE_DRAFT_STORAGE_KEY]).toMatchObject({
       phase: "captured",
       source: "selection",
@@ -352,19 +367,9 @@ describe("service worker private state and request boundaries", () => {
     const state: ReadyDraftState = { ...readyDraft(), source: "selection" };
     const { browser, send, fetchMock } = await loadWorker(state);
     connectReader(browser);
-    fetchMock.mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({ rewrittenText: "Traduction", model: "fake", requestId: "synthetic" }),
-      ),
-    );
-    expect(
-      await send({ ...runRequest, settings: { operation: "translate", targetLanguage: "fr" } }),
-    ).toMatchObject({ ok: true });
-    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
-      text: state.draft.text,
-      operation: "translate",
-      targetLanguage: "fr",
-    });
+    expect(await send(localRequest)).toEqual({ ok: true, localStarted: true });
+    expect(await send(completeRequest)).toEqual({ ok: true, localCompleted: true });
+    expect(fetchMock).not.toHaveBeenCalled();
     expect(
       await send({
         type: "APPLY_ACTIVE_REWRITE",
@@ -375,17 +380,210 @@ describe("service worker private state and request boundaries", () => {
     ).toMatchObject({ ok: false, code: "CONFLICT" });
     expect(browser.tabs.sendMessage).not.toHaveBeenCalled();
   });
-  it("requires consent for selected text and disallows writing modes", async () => {
-    const { send, localValues, fetchMock } = await loadWorker({
+  it("separates local reading acknowledgement from cloud writing consent", async () => {
+    const { browser, send, localValues, fetchMock } = await loadWorker({
       ...readyDraft(),
       source: "selection",
     });
-    expect(await send(runRequest)).toMatchObject({ ok: false, code: "INVALID_REQUEST" });
+    connectReader(browser);
+    delete localValues[LOCAL_READING_CONSENT_KEY];
+    expect(await send(localRequest)).toMatchObject({ ok: false, code: "AUTHENTICATION_REQUIRED" });
+    expect(await send({ type: "ACCEPT_LOCAL_READING_NOTICE" })).toEqual({
+      ok: true,
+      consented: true,
+    });
     delete localValues[PRIVACY_CONSENT_KEY];
+    expect(await send(localRequest)).toEqual({ ok: true, localStarted: true });
+    expect(await send(completeRequest)).toEqual({ ok: true, localCompleted: true });
     expect(
       await send({ ...runRequest, settings: { operation: "translate", targetLanguage: "fr" } }),
-    ).toMatchObject({ ok: false, code: "AUTHENTICATION_REQUIRED" });
+    ).toMatchObject({ ok: false, code: "INVALID_REQUEST" });
+    expect(await send(runRequest)).toMatchObject({ ok: false, code: "INVALID_REQUEST" });
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+  it("rejects stale attempts, changed languages and another panel's completion", async () => {
+    const { browser, send, sessionValues, fetchMock } = await loadWorker({
+      ...readyDraft(),
+      source: "selection",
+    });
+    const sender = {
+      id: EXTENSION_ID,
+      url: `${EXTENSION_URL}sidepanel.html`,
+      documentId: "panel-a",
+    };
+    connectReader(browser, sender.url, sender.documentId);
+    connectReader(browser, sender.url, "panel-b");
+    expect(await send(localRequest, sender)).toEqual({ ok: true, localStarted: true });
+    for (const request of [
+      { ...completeRequest, generationId: "stale" },
+      { ...completeRequest, snapshotId: "stale" },
+      { ...completeRequest, targetLanguage: "fr" },
+    ])
+      expect(await send(request, sender)).toMatchObject({ ok: false, code: "CONFLICT" });
+    expect(await send(completeRequest, { ...sender, documentId: "panel-b" })).toMatchObject({
+      ok: false,
+      code: "CONFLICT",
+    });
+    expect(
+      await send(
+        { type: "CANCEL_REWRITE", snapshotId: "snapshot-a", generationId: "generation-a" },
+        { ...sender, documentId: "panel-b" },
+      ),
+    ).toMatchObject({ ok: false, code: "CONFLICT" });
+    expect(await send(completeRequest, sender)).toEqual({ ok: true, localCompleted: true });
+    expect(sessionValues[ACTIVE_DRAFT_STORAGE_KEY]).toMatchObject({ phase: "preview" });
+    expect(sessionValues[ACTIVE_DRAFT_STORAGE_KEY]).not.toHaveProperty("rewrittenText");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+  it("requires the exact sidepanel sender and its authenticated reader document", async () => {
+    const { browser, send, fetchMock } = await loadWorker({ ...readyDraft(), source: "selection" });
+    connectReader(browser, `${EXTENSION_URL}sidepanel.html`, "panel-a");
+    expect(
+      await send(localRequest, {
+        id: EXTENSION_ID,
+        url: `${EXTENSION_URL}options.html`,
+        documentId: "panel-a",
+      }),
+    ).toMatchObject({ ok: false, code: "AUTHENTICATION_REQUIRED" });
+    expect(
+      await send(localRequest, {
+        id: EXTENSION_ID,
+        url: `${EXTENSION_URL}sidepanel.html`,
+        documentId: "panel-b",
+      }),
+    ).toMatchObject({ ok: false, code: "CANCELLED" });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+  it("cancels local generation on source tab activation changes", async () => {
+    const { browser, send, sessionValues, fetchMock } = await loadWorker({
+      ...readyDraft(),
+      source: "selection",
+    });
+    connectReader(browser);
+    await send(localRequest);
+    browser.tabs.onActivated.addListener.mock.calls[0]?.[0]({ tabId: 8 });
+    await vi.waitFor(() => expect(sessionValues[ACTIVE_DRAFT_STORAGE_KEY]).toBeUndefined());
+    expect(await send(completeRequest)).toMatchObject({ ok: false, code: "CONFLICT" });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+  it("clears completed reading previews on a source tab switch", async () => {
+    const { browser, send, sessionValues } = await loadWorker({
+      ...readyDraft(),
+      source: "selection",
+    });
+    connectReader(browser);
+    await send(localRequest);
+    await send(completeRequest);
+    expect(sessionValues[ACTIVE_DRAFT_STORAGE_KEY]).toMatchObject({ phase: "preview" });
+    browser.tabs.onActivated.addListener.mock.calls[0]?.[0]({ tabId: 8 });
+    await vi.waitFor(() => expect(sessionValues[ACTIVE_DRAFT_STORAGE_KEY]).toBeUndefined());
+  });
+  it("does not resume empty-capture reading scope after switching away and back", async () => {
+    const { browser, send, sessionValues } = await loadWorker();
+    connectReader(browser);
+    browser.tabs.sendMessage.mockResolvedValue({ ok: true, empty: true });
+    expect(await send({ type: "CAPTURE_ACTIVE_TEXT" })).toMatchObject({ ok: false });
+    expect(sessionValues[ACTIVE_DRAFT_STORAGE_KEY]).toMatchObject({ status: "error" });
+    browser.tabs.onActivated.addListener.mock.calls[0]?.[0]({ tabId: 8 });
+    // A serialized request drains the activation transition before returning.
+    await send({ type: "READ_SELECTION" });
+    browser.tabs.onActivated.addListener.mock.calls[0]?.[0]({ tabId: 7 });
+    browser.tabs.sendMessage.mockClear();
+    browser.tabs.sendMessage.mockResolvedValue({ ok: true, draft: readyDraft().draft });
+    expect(await send({ type: "READ_SELECTION" })).toEqual({ ok: true, unchanged: true });
+    expect(browser.tabs.sendMessage).not.toHaveBeenCalled();
+  });
+  it("clears both consent scopes and prevents completion after withdrawal", async () => {
+    const { browser, send, localValues, sessionValues } = await loadWorker({
+      ...readyDraft(),
+      source: "selection",
+    });
+    connectReader(browser);
+    await send(localRequest);
+    expect(await send({ type: "CLEAR_PRIVATE_DATA" })).toEqual({ ok: true, cleared: true });
+    expect(localValues).not.toHaveProperty(LOCAL_READING_CONSENT_KEY);
+    expect(localValues).not.toHaveProperty(PRIVACY_CONSENT_KEY);
+    expect(sessionValues).not.toHaveProperty(ACTIVE_DRAFT_STORAGE_KEY);
+    expect(await send(completeRequest)).toMatchObject({ ok: false, code: "CONFLICT" });
+  });
+  it("expires local generation and rejects late completion", async () => {
+    const { browser, send, sessionValues } = await loadWorker({
+      ...readyDraft(),
+      source: "selection",
+    });
+    connectReader(browser);
+    await send(localRequest);
+    (sessionValues[ACTIVE_DRAFT_STORAGE_KEY] as ReadyDraftState).draft.expiresAt = Date.now() - 1;
+    expect(await send(completeRequest)).toMatchObject({ ok: false, code: "CONFLICT" });
+    expect(sessionValues).not.toHaveProperty(ACTIVE_DRAFT_STORAGE_KEY);
+  });
+  it("recovers a local generation after worker restart without accepting its lost completion", async () => {
+    const initial = {
+      ...readyDraft(),
+      source: "selection" as const,
+      phase: "generating" as const,
+      generationId: "generation-a",
+    };
+    const { browser, send, sessionValues, fetchMock } = await loadWorker(initial);
+    connectReader(browser);
+    expect(sessionValues[ACTIVE_DRAFT_STORAGE_KEY]).toMatchObject({
+      phase: "captured",
+      source: "selection",
+    });
+    expect(await send(completeRequest)).toMatchObject({ ok: false, code: "CONFLICT" });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+  it("rejects completion after navigation or tab closure", async () => {
+    for (const closing of [false, true]) {
+      vi.resetModules();
+      const { browser, send, sessionValues, fetchMock } = await loadWorker({
+        ...readyDraft(),
+        source: "selection",
+      });
+      connectReader(browser);
+      await send(localRequest);
+      if (closing) browser.tabs.onRemoved.addListener.mock.calls[0]?.[0](7);
+      else browser.tabs.onUpdated.addListener.mock.calls[0]?.[0](7, { status: "loading" });
+      await vi.waitFor(() => expect(sessionValues).not.toHaveProperty(ACTIVE_DRAFT_STORAGE_KEY));
+      expect(await send(completeRequest)).toMatchObject({ ok: false, code: "CONFLICT" });
+      expect(fetchMock).not.toHaveBeenCalled();
+    }
+  });
+  it("rechecks a disconnected owner after an awaited active-tab lookup", async () => {
+    const { browser, send, sessionValues } = await loadWorker({
+      ...readyDraft(),
+      source: "selection",
+    });
+    const reader = connectReader(browser);
+    let resolve: ((value: { id: number }[]) => void) | undefined;
+    browser.tabs.query.mockImplementationOnce(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+        }),
+    );
+    const request = send(localRequest);
+    await vi.waitFor(() => expect(resolve).toBeDefined());
+    reader.close();
+    resolve?.([{ id: 7 }]);
+    expect(await request).toMatchObject({ ok: false, code: "CANCELLED" });
+    expect(sessionValues[ACTIVE_DRAFT_STORAGE_KEY]).toMatchObject({ phase: "captured" });
+  });
+  it("bounds an abandoned local attempt by a worker lease", async () => {
+    const { browser, send, sessionValues } = await loadWorker({
+      ...readyDraft(),
+      source: "selection",
+    });
+    connectReader(browser);
+    vi.useFakeTimers();
+    try {
+      await send(localRequest);
+      await vi.advanceTimersByTimeAsync(270_000);
+      expect(sessionValues[ACTIVE_DRAFT_STORAGE_KEY]).toMatchObject({ phase: "captured" });
+      expect(await send(completeRequest)).toMatchObject({ ok: false, code: "CONFLICT" });
+    } finally {
+      vi.useRealTimers();
+    }
   });
   beforeEach(() => {
     vi.resetModules();

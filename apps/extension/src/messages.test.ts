@@ -7,6 +7,22 @@ import {
   isExtensionResponse,
 } from "./messages.js";
 describe("message boundaries", () => {
+  it("accepts content-free local translation lifecycle messages only", () => {
+    expect(isExtensionRequest({ type: "ACCEPT_LOCAL_READING_NOTICE" })).toBe(true);
+    expect(isExtensionRequest({ type: "ACCEPT_LOCAL_READING_NOTICE", text: "extra" })).toBe(false);
+    for (const type of ["BEGIN_LOCAL_TRANSLATION", "COMPLETE_LOCAL_TRANSLATION"]) {
+      const request = { type, snapshotId: "s", generationId: "g", targetLanguage: "vi" };
+      expect(isExtensionRequest(request)).toBe(true);
+      expect(isExtensionRequest({ ...request, targetLanguage: "same" })).toBe(false);
+      expect(isExtensionRequest({ ...request, targetLanguage: "unknown" })).toBe(false);
+      expect(isExtensionRequest({ ...request, text: "private" })).toBe(false);
+      expect(isExtensionRequest({ ...request, generationId: "" })).toBe(false);
+    }
+    for (const key of ["localStarted", "localCompleted"]) {
+      expect(isExtensionResponse({ ok: true, [key]: true })).toBe(true);
+      expect(isExtensionResponse({ ok: true, [key]: true, text: "private" })).toBe(false);
+    }
+  });
   it("validates read-only selection state and exact capture messages", () => {
     const state = {
       status: "ready",

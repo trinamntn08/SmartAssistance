@@ -1,6 +1,6 @@
 # Architecture
 
-Implementation snapshot: 2026-09-05. This document describes the local MVP in
+Implementation snapshot: 2026-10-04. This document describes the local MVP in
 the repository. [Current status](../status.md) tracks verification and release
 gaps. ADRs remain the authority for consequential decisions.
 
@@ -20,6 +20,8 @@ playback lifecycle are defined in
 [ADR-0010](../decisions/0010-selection-sound-controls.md).
 First-opening translation waits for visible-panel readiness as described in
 [ADR-0011](../decisions/0011-initial-reading-readiness.md).
+Reading now runs on Chrome's local models under
+[ADR-0013](../decisions/0013-chrome-local-reading-translation.md).
 
 ## Principles
 
@@ -53,6 +55,7 @@ flowchart LR
     User --> Gesture[Toolbar / context menu / shortcut]
     Gesture --> Worker[MV3 service worker]
     Panel <--> Worker
+    Panel --> Local[Chrome local translation models]
     Worker <--> Content[Content script and editor adapter]
     Content <--> Editor[Website editor]
     Worker <--> Session[Chrome session storage]
@@ -69,6 +72,7 @@ flowchart LR
 | --- | --- |
 | `apps/extension/src/sidepanel.ts`, `.html`, `.css` | Controls, consent disclosure, preview, copy, and user actions |
 | `apps/extension/src/pronunciation.ts` | Local-only voice selection, bounded playback and cancellation |
+| `apps/extension/src/local-translation.ts` | Local detection/translation, model setup, bounded waits, and disposal |
 | `apps/extension/src/service-worker.ts` | Invocation, document targeting, shared interaction state, network requests, cancellation, expiry |
 | `apps/extension/src/content-script.ts` | Validated Chrome messages into editor operations |
 | `apps/extension/src/editor.ts` | Eligibility, complete-field capture, conflict detection, plain-text application, undo |
@@ -108,6 +112,25 @@ domain service does not import Chrome, the HTTP server, or the OpenAI SDK.
   The panel waits for acknowledgement on its current port before translation or
   polling, and reconsiders pending initial translation on visibility/readiness.
   One-shot attempt guards prevent retries when reopening attempted interactions.
+
+### Local reading translation
+
+The side panel uses an injected provider adapter around Chrome LanguageDetector
+and Translator. The service worker authenticates the owning panel and reading
+port, validates local acknowledgement, current tab, expiry, and attempt identity,
+and authorizes content-free BEGIN/COMPLETE messages. No translated output is
+stored by the worker; the panel displays it only after completion is authorized.
+Selection RUN_REWRITE messages are rejected before any network request.
+Cloud-writing consent and its provider route remain separate.
+
+Runtime availability checks and in-panel setup/retry controls handle unsupported
+devices, language pairs, and gesture-dependent downloads. Ambiguous detection
+asks for a longer passage. One detector and one translator pair are reused while
+visible, then destroyed on teardown. Individual setup waits are 120 seconds,
+detection waits 5 seconds, and translation 15 seconds; a 270-second worker lease
+bounds abandoned attempts. Tab switches invalidate reading scope and capture.
+There is no remote fallback or persistent result cache. Native model/download
+compatibility, bilingual quality, and measured performance remain release gates.
 
 ### Local pronunciation
 

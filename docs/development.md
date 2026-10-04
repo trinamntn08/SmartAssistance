@@ -23,8 +23,10 @@ tracked in [implementation status](status.md).
    and select `apps/extension/dist`.
 7. Focus a supported field on a normal webpage and invoke SmartAssistance through
    its toolbar icon, context menu, or keyboard shortcut.
-8. Read the first-use privacy disclosure. Accepting it enables Generate; capturing
-   alone never sends draft text to the API.
+8. Writing requires the cloud privacy disclosure before Generate sends text.
+   Reading uses a separate local notice and Chrome-managed models. Use Chrome
+   138+; click Enable local translation if packs require setup. Reading works
+   without the API or an OpenAI key. Unavailable local models show an error.
 
 To run validation, install Chromium once: `npx playwright install chromium`.
 On Linux CI, use `npx playwright install --with-deps chromium`.
@@ -100,6 +102,9 @@ contracts build clears stale output and emits no test files. `npm run check` can
 be run repeatedly after a build without formatting generated bundles.
 
 ## Manual extension checks
+
+For local translation setup, synthetic quality cases, and outstanding real-model
+checks, see [local translation verification](local-translation-verification.md).
 
 Managed contenteditable editors with Lexical/Draft markers use native plain-text
 insertion. Their Undo restores text, not original formatting. After reloading the

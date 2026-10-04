@@ -1,7 +1,10 @@
 # Chrome local translation integration plan
 
 Date: 2026-10-04
-Status: Proposed; implementation has not started.
+Status: local adapter and integrated reading workflow implemented and tested.
+Native Chrome setup, offline behavior, quality review, and latency remain pending.
+See [verification instructions](local-translation-verification.md) and
+[the implementation record](status.md).
 
 ## Outcome and scope
 
@@ -10,13 +13,16 @@ and `LanguageDetector` APIs. Prioritize English and French to Vietnamese,
 then verify other supported language pairs. Preserve the current reading panel,
 saved target language, active reading, and pronunciation controls.
 
-Proposed first-version policy: reading translation uses only the local provider.
+Implemented first-version policy: reading translation uses only the local provider.
 Unavailable APIs, unsupported pairs, failed downloads, or uncertain source-language
 detection produce a clear message and an explicit retry/setup action. No automatic
 cloud fallback or paid request. Grammar correction and writing improvement retain
 their existing server provider. A user-selected cloud fallback is separate scope.
 
-This is a plan, not evidence of browser compatibility, speed, or translation quality.
+Implementation does not establish real-model compatibility, speed, or quality.
+The isolated probe exposed both APIs and downloadable pairs, but its detector was
+unavailable. ADR-0013 records the adjustment to proceed with guarded integration
+while keeping real-model release verification outstanding.
 
 ## Constraints confirmed from documentation
 

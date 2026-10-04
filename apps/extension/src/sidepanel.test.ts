@@ -1,9 +1,12 @@
 // @vitest-environment jsdom
 import panelHtml from "./sidepanel.html?raw";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { LocalTranslationError } from "./local-translation.js";
 import {
   ACTIVE_DRAFT_STORAGE_KEY,
   PRIVACY_CONSENT_KEY,
+  LOCAL_READING_CONSENT_KEY,
+  LOCAL_READING_NOTICE_VERSION,
   consentScope,
   READING_READY_MESSAGE,
   type ExtensionRequest,
@@ -20,6 +23,29 @@ let detect: ReturnType<
 >;
 let acknowledgeReading: (message: unknown) => void;
 let autoAcknowledge = true;
+const localMock = vi.hoisted(() => ({ translate: vi.fn(), dispose: vi.fn() }));
+vi.mock("./local-translation.js", async (original) => ({
+  ...(await original<typeof import("./local-translation.js")>()),
+  browserLocalTranslationPlatform: () => undefined,
+  createLocalTranslation: () => localMock,
+}));
+let localResponse: Promise<ExtensionResponse>;
+function generationCalls(): Extract<ExtensionRequest, { type: "RUN_REWRITE" }>[] {
+  return send.mock.calls.flatMap(([value]) =>
+    value.type === "RUN_REWRITE"
+      ? [value]
+      : value.type === "BEGIN_LOCAL_TRANSLATION"
+        ? [
+            {
+              type: "RUN_REWRITE" as const,
+              snapshotId: value.snapshotId,
+              generationId: value.generationId,
+              settings: { operation: "translate" as const, targetLanguage: value.targetLanguage },
+            },
+          ]
+        : [],
+  );
+}
 const apiUrl = "http://127.0.0.1:8787";
 function ready(snapshotId = "draft-A"): ReadyDraftState {
   return {
@@ -43,7 +69,7 @@ function emit(state: ReadyDraftState): void {
   changed({ [ACTIVE_DRAFT_STORAGE_KEY]: { newValue: state } }, "session");
 }
 function attempt(): Extract<ExtensionRequest, { type: "RUN_REWRITE" }> {
-  const request = send.mock.calls.find(([value]) => value.type === "RUN_REWRITE")?.[0];
+  const request = generationCalls()[0];
   if (request?.type !== "RUN_REWRITE") throw new Error("No rewrite request");
   return request;
 }
@@ -60,7 +86,21 @@ beforeEach(async () => {
   vi.resetModules();
   autoAcknowledge = true;
   document.documentElement.innerHTML = panelHtml;
+  localMock.translate.mockReset();
+  localMock.dispose.mockReset();
+  localMock.translate.mockImplementation(async () => {
+    const response = await localResponse;
+    if (!response.ok || !("rewrite" in response)) throw new Error("Synthetic local failure");
+    return { text: response.rewrite.rewrittenText, sourceLanguage: "fr" };
+  });
   send = vi.fn(async (request: ExtensionRequest): Promise<ExtensionResponse> => {
+    if (request.type === "BEGIN_LOCAL_TRANSLATION") {
+      localResponse = new Promise((resolve) => {
+        finish = resolve;
+      });
+      return { ok: true, localStarted: true };
+    }
+    if (request.type === "COMPLETE_LOCAL_TRANSLATION") return { ok: true, localCompleted: true };
     if (request.type === "RUN_REWRITE")
       return new Promise((resolve) => {
         finish = resolve;
@@ -105,7 +145,10 @@ beforeEach(async () => {
     storage: {
       session: { get: async () => ({ [ACTIVE_DRAFT_STORAGE_KEY]: ready() }) },
       local: {
-        get: vi.fn(async () => ({ [PRIVACY_CONSENT_KEY]: consentScope(apiUrl) })),
+        get: vi.fn(async () => ({
+          [PRIVACY_CONSENT_KEY]: consentScope(apiUrl),
+          [LOCAL_READING_CONSENT_KEY]: LOCAL_READING_NOTICE_VERSION,
+        })),
         set: vi.fn(async () => undefined),
       },
       onChanged: {
@@ -126,6 +169,40 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe("preview identity and event ordering", () => {
+  it("requires local acknowledgement even when cloud writing was already consented", () => {
+    changed({ [LOCAL_READING_CONSENT_KEY]: { newValue: undefined } }, "local");
+    emit({ ...ready(), source: "selection", autoTranslate: true });
+    expect(document.getElementById("local-reading-notice")?.hidden).toBe(false);
+    expect(document.getElementById("privacy-notice")?.hidden).toBe(true);
+    expect(generationCalls()).toHaveLength(0);
+    expect(localMock.translate).not.toHaveBeenCalled();
+  });
+  it("shows an explicit setup action without falling back to RUN_REWRITE", async () => {
+    localMock.translate.mockRejectedValueOnce(new LocalTranslationError("SETUP_REQUIRED"));
+    emit({ ...ready(), source: "selection", autoTranslate: true });
+    await vi.waitFor(() => expect(button("local-translation-action").hidden).toBe(false));
+    expect(button("local-translation-action").textContent).toBe("Enable local translation");
+    expect(send.mock.calls.some(([request]) => request.type === "RUN_REWRITE")).toBe(false);
+    button("local-translation-action").click();
+    await vi.waitFor(() => expect(generationCalls()).toHaveLength(2));
+    finish(success());
+    await vi.waitFor(() => expect(field("preview").value).toBe("Rewrite A"));
+  });
+  it("cannot publish local output if worker completion is refused", async () => {
+    const originalSend = send.getMockImplementation();
+    if (!originalSend) throw new Error("Missing fixture message implementation");
+    send.mockImplementation(async (request) =>
+      request.type === "COMPLETE_LOCAL_TRANSLATION"
+        ? { ok: false, code: "CANCELLED", message: "Reading session ended." }
+        : await originalSend(request),
+    );
+    emit({ ...ready(), source: "selection", autoTranslate: true });
+    finish(success());
+    await vi.waitFor(() =>
+      expect(document.getElementById("status")?.textContent).toBe("Reading session ended."),
+    );
+    expect(field("preview").value).toBe("");
+  });
   it("translates the initial hidden capture when the panel first becomes visible", async () => {
     Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" });
     document.dispatchEvent(new Event("visibilitychange"));
@@ -136,7 +213,7 @@ describe("preview identity and event ordering", () => {
     expect(attempt().settings.targetLanguage).toBe("vi");
     document.dispatchEvent(new Event("visibilitychange"));
     acknowledgeReading(READING_READY_MESSAGE);
-    expect(send.mock.calls.filter(([request]) => request.type === "RUN_REWRITE")).toHaveLength(1);
+    expect(generationCalls()).toHaveLength(1);
     finish(success());
     await vi.waitFor(() => expect(field("preview").value).toBe("Rewrite A"));
   });
@@ -158,13 +235,15 @@ describe("preview identity and event ordering", () => {
     emit({ ...ready(), source: "selection", autoTranslate: true });
     finish({ ok: false, code: "PROVIDER_ERROR", message: "Synthetic failure." });
     await vi.waitFor(() =>
-      expect(document.getElementById("status")?.textContent).toBe("Synthetic failure."),
+      expect(document.getElementById("status")?.textContent).toBe(
+        "Local translation failed. Please retry.",
+      ),
     );
     for (const value of ["hidden", "visible"]) {
       Object.defineProperty(document, "visibilityState", { configurable: true, value });
       document.dispatchEvent(new Event("visibilitychange"));
     }
-    expect(send.mock.calls.filter(([request]) => request.type === "RUN_REWRITE")).toHaveLength(1);
+    expect(generationCalls()).toHaveLength(1);
   });
   it("ignores readiness from a disconnected port and starts only the current capture", async () => {
     Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" });
@@ -334,7 +413,7 @@ describe("preview identity and event ordering", () => {
         select("language").dispatchEvent(new Event("change"));
         finish(success());
       } else if (action === "consent")
-        changed({ [PRIVACY_CONSENT_KEY]: { newValue: undefined } }, "local");
+        changed({ [LOCAL_READING_CONSENT_KEY]: { newValue: undefined } }, "local");
       else button("clear-private-data").click();
       expect(speechSynthesis.cancel).toHaveBeenCalled();
       expect(button("translation-sound").getAttribute("aria-label")).toBe("Listen to translation");
@@ -476,7 +555,7 @@ describe("preview identity and event ordering", () => {
     initialReply({ ok: false, code: "CANCELLED", message: "Panel hidden." });
     await vi.waitFor(() => expect(button("generate").disabled).toBe(false));
     emit({ ...ready("late-capture"), source: "selection", autoTranslate: true });
-    expect(send.mock.calls.filter(([request]) => request.type === "RUN_REWRITE")).toHaveLength(1);
+    expect(generationCalls()).toHaveLength(1);
   });
   it("does not lose consent accepted while the initial preferences are still loading", async () => {
     changed({ [ACTIVE_DRAFT_STORAGE_KEY]: { newValue: undefined } }, "session");
@@ -492,9 +571,9 @@ describe("preview identity and event ordering", () => {
     );
     await import("./sidepanel.js");
     emit({ ...ready(), source: "selection", autoTranslate: true });
-    button("accept-privacy").click();
+    button("accept-local-reading").click();
     await vi.waitFor(() => expect(document.getElementById("privacy-notice")?.hidden).toBe(true));
-    expect(send.mock.calls.filter(([request]) => request.type === "RUN_REWRITE")).toHaveLength(0);
+    expect(generationCalls()).toHaveLength(0);
     resolveLocal({ translationLanguage: "vi" });
     await vi.waitFor(() => expect(attempt().settings.targetLanguage).toBe("vi"));
     finish(success());
@@ -505,17 +584,17 @@ describe("preview identity and event ordering", () => {
     emit(state);
     expect(attempt().settings).toEqual({ operation: "translate", targetLanguage: "vi" });
     emit(state);
-    expect(send.mock.calls.filter(([request]) => request.type === "RUN_REWRITE")).toHaveLength(1);
+    expect(generationCalls()).toHaveLength(1);
     finish({ ok: false, code: "PROVIDER_ERROR", message: "Try again." });
     await vi.waitFor(() => expect(button("generate").disabled).toBe(false));
     emit(state);
-    expect(send.mock.calls.filter(([request]) => request.type === "RUN_REWRITE")).toHaveLength(1);
+    expect(generationCalls()).toHaveLength(1);
   });
   it("waits for consent then immediately translates the context-menu selection", async () => {
-    changed({ [PRIVACY_CONSENT_KEY]: { newValue: undefined } }, "local");
+    changed({ [LOCAL_READING_CONSENT_KEY]: { newValue: undefined } }, "local");
     emit({ ...ready(), source: "selection", autoTranslate: true });
     expect(send).not.toHaveBeenCalled();
-    button("accept-privacy").click();
+    button("accept-local-reading").click();
     await vi.waitFor(() => expect(attempt().settings.targetLanguage).toBe("vi"));
     finish(success());
     await vi.waitFor(() => expect(field("preview").value).toBe("Rewrite A"));
@@ -535,7 +614,11 @@ describe("preview identity and event ordering", () => {
     await import("./sidepanel.js");
     emit({ ...ready(), source: "selection", autoTranslate: true });
     expect(send).not.toHaveBeenCalled();
-    resolveLocal({ [PRIVACY_CONSENT_KEY]: consentScope(apiUrl), translationLanguage: "fr" });
+    resolveLocal({
+      [PRIVACY_CONSENT_KEY]: consentScope(apiUrl),
+      [LOCAL_READING_CONSENT_KEY]: LOCAL_READING_NOTICE_VERSION,
+      translationLanguage: "fr",
+    });
     await vi.waitFor(() => expect(attempt().settings.targetLanguage).toBe("fr"));
     finish(success());
     await vi.waitFor(() => expect(field("preview").value).toBe("Rewrite A"));
@@ -560,7 +643,11 @@ describe("preview identity and event ordering", () => {
         select("language").value = "de";
         select("language").dispatchEvent(new Event("change"));
       }
-      resolveLocal({ [PRIVACY_CONSENT_KEY]: consentScope(apiUrl), translationLanguage: "fr" });
+      resolveLocal({
+        [PRIVACY_CONSENT_KEY]: consentScope(apiUrl),
+        [LOCAL_READING_CONSENT_KEY]: LOCAL_READING_NOTICE_VERSION,
+        translationLanguage: "fr",
+      });
       await vi.waitFor(() => expect(select("language").value).toBe(edited ? "de" : "fr"));
     },
   );
@@ -578,7 +665,9 @@ describe("preview identity and event ordering", () => {
     finish(success());
     await vi.waitFor(() => expect(field("preview").value).toBe("Rewrite A"));
     expect(field("preview").readOnly).toBe(true);
-    expect(document.getElementById("status")?.textContent).toBe("Translation ready.");
+    expect(document.getElementById("status")?.textContent).toBe(
+      "Translation ready on this device.",
+    );
     emit(ready("draft-B"));
     expect(button("generate").hidden).toBe(false);
     expect(button("copy").hidden).toBe(false);
@@ -615,15 +704,13 @@ describe("preview identity and event ordering", () => {
       select("language").value = target;
       select("language").dispatchEvent(new Event("change"));
     }
-    expect(send.mock.calls.filter(([request]) => request.type === "RUN_REWRITE")).toHaveLength(1);
+    expect(generationCalls()).toHaveLength(1);
     firstReply(success());
     await vi.waitFor(() => expect(button("generate").disabled).toBe(true));
     emit({ ...ready(), source: "selection", phase: "preview", generationId: first.generationId });
-    await vi.waitFor(() =>
-      expect(send.mock.calls.filter(([request]) => request.type === "RUN_REWRITE")).toHaveLength(2),
-    );
+    await vi.waitFor(() => expect(generationCalls()).toHaveLength(2));
     expect(field("preview").value).toBe("");
-    const second = send.mock.calls.filter(([request]) => request.type === "RUN_REWRITE")[1]?.[0];
+    const second = generationCalls()[1];
     if (second?.type !== "RUN_REWRITE") throw new Error("Missing latest translation");
     expect(second.settings.targetLanguage).toBe("de");
     finish({

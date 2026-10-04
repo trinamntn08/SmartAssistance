@@ -7,25 +7,32 @@ complete focused eligible editor for writing, after a user invocation.
 Writing-field capture does not submit a request. First use requires acceptance of the disclosure;
 Generate then sends the captured text, writing mode, applicable improvement
 style, and target language to the configured SmartAssistance API and OpenAI.
-Reading translation sends only the captured selection and target language. Choosing
-**Translate with SmartAssistance** in the right-click menu sends that selection
-immediately after consent, using the saved language or Vietnamese by default.
+Reading translation processes the captured selection entirely in the extension
+panel using Chrome's local LanguageDetector and Translator models. It makes no
+SmartAssistance or cloud translation request and has no paid fallback. Chrome may
+download language models after an explicit in-panel setup click; the selected
+text is not included in a cloud translation request. Choosing
+**Translate with SmartAssistance** translates locally after local acknowledgement
+and any required setup, using the saved language or Vietnamese by default.
 Opening selected text with the toolbar also translates immediately. Changing
 the translation language requests a new translation of that same selection.
-Before consent, the panel waits; accepting consent starts that pending translation.
+Before local acknowledgement, the panel waits. Local acknowledgement is separate
+from cloud-writing consent and does not grant permission to send writing text.
 While the panel is visible and consented, it checks for settled page selections
 on the explicitly invoked active tab every 700ms. A new passage is captured and
 translated automatically. Repeated text is ignored; mouse dragging and rapid
 selection changes wait until the selection is finished and stable. Writing fields
 are excluded from active reading. Hiding or closing the panel ends the reading
-connection and stops polling; the last reader disconnect also cancels a pending
-selection translation. Navigation requires a new invocation on the page.
+connection and stops polling; the owning reader disconnect also cancels its pending
+translation. Navigation or switching away from the source tab clears reading
+scope and requires a new invocation.
 No
 surrounding page, thread, URL,
 cookies, browsing history, or model API key is sent from the extension.
 
-Replacement always requires a separate user action. Cancel stops waiting and
-aborts the provider request where possible; it cannot retract data already sent.
+Replacement always requires a separate user action. Local Cancel stops waiting
+and discards obsolete results; Chrome may continue an already started model
+download. Cloud writing Cancel cannot retract data already sent.
 
 ## What SmartAssistance retains
 
@@ -51,8 +58,10 @@ Device speech services provide the voices; availability and quality vary.
   alarms or timers while suspended; expiry checks prevent reuse, and cleanup runs
   when the extension resumes execution. Closing a panel alone does not end the
   shared interaction in other panels.
-- The versioned consent preference is stored locally, scoped to the configured
-  API endpoint. Clear text and consent removes it and invalidates the capture.
+- Cloud-writing consent is versioned and scoped to the API endpoint. Local reading
+  has a separate versioned acknowledgement. Both preferences are stored locally;
+  Clear text and consent removes both and invalidates the capture. Chrome manages
+  installed models independently; clearing extension consent does not delete them.
 - The preferred translation language is stored locally without selected text or
   translations. Clear text and consent retains this non-content preference.
 - The API has no draft database/cache/history and does not log draft or rewrite

@@ -22,12 +22,16 @@
 
       <section id="privacy-notice" aria-labelledby="privacy-title">
         <h2 id="privacy-title">Before you send text</h2>
-        <p>Opening a selected passage with the extension or choosing Translate with SmartAssistance from the right-click menu sends your selected text and saved target language to the SmartAssistance API and OpenAI after consent. Changing the translation language sends the same selected text for a new translation. Generate sends the captured writing field and rewrite settings. Surrounding page content is not sent.</p>
-        <p>While this panel is visible, selecting a new passage on the page where you opened the extension automatically translates it after a brief pause. Closing or hiding the panel stops active reading. Writing fields are not monitored.</p>
+        <p>Generate sends the captured writing field and rewrite settings to the SmartAssistance API and OpenAI after consent. Surrounding page content is not sent. Reading translation uses Chrome's local models under a separate notice.</p>
         <p>The app does not save draft history. Captured text is temporary and expires after ten minutes. It is cleared when you recapture, navigate, close the source tab, or choose Clear text and consent.</p>
         <p>OpenAI retention depends on the provider account and model settings. Disabling response storage does not guarantee zero provider retention.</p>
         <a href="https://developers.openai.com/api/docs/guides/your-data" target="_blank" rel="noreferrer">OpenAI data controls</a>
-        <button id="accept-privacy" class="primary" type="button">I agree to send text for translation or writing</button>
+        <button id="accept-privacy" class="primary" type="button">I agree to send writing text</button>
+      </section>
+      <section id="local-reading-notice" class="notice" hidden>
+        <h2>Translate on this device</h2>
+        <p>Chrome translates your selected text locally. It is not sent to SmartAssistance or a cloud translator. Chrome may download language models the first time you use a language. No text history is saved.</p>
+        <button id="accept-local-reading" class="primary" type="button">Enable local reading</button>
       </section>
 
       <section id="workspace" hidden>
@@ -83,6 +87,7 @@
         </div>
 
         <button id="generate" class="primary" type="button" disabled>Generate preview</button>
+        <button id="local-translation-action" class="primary" type="button" hidden>Enable local translation</button>
         <button id="cancel" class="secondary" type="button" hidden>Cancel rewrite</button>
 
         <div id="result" hidden>
@@ -111,7 +116,7 @@
       </section>
 
       <footer>
-        Translation sends only your selected text when you open it or change language. Generate sends your writing field. There is no saved text history.
+        Reading translation runs on your device. Generate sends your writing field after cloud consent. There is no saved text history.
         <button id="clear-private-data" class="secondary" type="button">Clear text and consent</button>
       </footer>
     </main>

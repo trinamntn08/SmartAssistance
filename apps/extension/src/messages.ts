@@ -15,6 +15,8 @@ export const PRIVACY_NOTICE_VERSION = "2026-10-03.4";
 export const READING_PORT_NAME = "active-reading";
 export const READING_READY_MESSAGE = "READING_READY";
 export const TRANSLATION_LANGUAGE_KEY = "translationLanguage";
+export const LOCAL_READING_CONSENT_KEY = "localReadingConsent";
+export const LOCAL_READING_NOTICE_VERSION = "2026-10-04.1";
 export const PRIVACY_CONSENT_KEY = "privacyConsent";
 export const ACTIVE_DRAFT_STORAGE_KEY = "activeDraftState";
 export const AUTH_TOKEN_STORAGE_KEY = "applicationAccessToken";
@@ -63,6 +65,13 @@ export type ExtensionRequest =
   | { type: "CAPTURE_ACTIVE_SELECTION" }
   | { type: "READ_SELECTION" }
   | { type: "ACCEPT_PRIVACY_NOTICE" }
+  | { type: "ACCEPT_LOCAL_READING_NOTICE" }
+  | {
+      type: "BEGIN_LOCAL_TRANSLATION" | "COMPLETE_LOCAL_TRANSLATION";
+      snapshotId: string;
+      generationId: string;
+      targetLanguage: string;
+    }
   | { type: "CLEAR_PRIVATE_DATA" }
   | { type: "CANCEL_REWRITE"; snapshotId: string; generationId: string }
   | {
@@ -79,6 +88,8 @@ export type ExtensionResponse =
   | { ok: true; consented: true }
   | { ok: true; cleared: true }
   | { ok: true; cancelled: true }
+  | { ok: true; localStarted: true }
+  | { ok: true; localCompleted: true }
   | { ok: true; rewrite: RewriteResponse; snapshotId: string; generationId: string }
   | { ok: true; applied: true }
   | { ok: true; undone: true }
@@ -190,11 +201,21 @@ export function isExtensionRequest(value: unknown): value is ExtensionRequest {
       "CAPTURE_ACTIVE_SELECTION",
       "READ_SELECTION",
       "ACCEPT_PRIVACY_NOTICE",
+      "ACCEPT_LOCAL_READING_NOTICE",
       "CLEAR_PRIVATE_DATA",
     ].includes(value.type as string)
   )
     return hasOnlyKeys(value, ["type"]);
   if (!isIdentifier(value.snapshotId) || !isIdentifier(value.generationId)) return false;
+  if (value.type === "BEGIN_LOCAL_TRANSLATION" || value.type === "COMPLETE_LOCAL_TRANSLATION")
+    return (
+      hasOnlyKeys(value, ["type", "snapshotId", "generationId", "targetLanguage"]) &&
+      parseRewriteRequest({
+        text: "validation",
+        operation: "translate",
+        targetLanguage: value.targetLanguage,
+      }).success
+    );
   if (value.type === "CANCEL_REWRITE" || value.type === "UNDO_ACTIVE_REWRITE")
     return hasOnlyKeys(value, ["type", "snapshotId", "generationId"]);
   if (value.type === "APPLY_ACTIVE_REWRITE")
@@ -226,9 +247,17 @@ export function isExtensionResponse(value: unknown): value is ExtensionResponse 
       isIdentifier(value.snapshotId) &&
       isIdentifier(value.generationId)
     );
-  return ["captured", "consented", "cleared", "cancelled", "applied", "undone", "unchanged"].some(
-    (key) => value[key] === true && hasOnlyKeys(value, ["ok", key]),
-  );
+  return [
+    "captured",
+    "consented",
+    "cleared",
+    "cancelled",
+    "applied",
+    "undone",
+    "unchanged",
+    "localStarted",
+    "localCompleted",
+  ].some((key) => value[key] === true && hasOnlyKeys(value, ["ok", key]));
 }
 export function consentScope(apiUrl: string): string {
   return `${PRIVACY_NOTICE_VERSION}:${apiUrl}`;

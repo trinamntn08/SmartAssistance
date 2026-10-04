@@ -17,6 +17,8 @@ import {
   isContentScriptResponse,
   isExtensionRequest,
   PRIVACY_CONSENT_KEY,
+  LOCAL_READING_CONSENT_KEY,
+  LOCAL_READING_NOTICE_VERSION,
   READING_PORT_NAME,
   READING_READY_MESSAGE,
   type ReadyDraftState,
@@ -27,7 +29,24 @@ declare const __SMARTASSISTANCE_BETA_API_TOKEN__: string;
 const API_TIMEOUT_MS = 20_000;
 const CONTEXT_MENU_ID = "smartassistance-rewrite";
 const TRANSLATE_MENU_ID = "smartassistance-translate";
-let pending: { controller: AbortController; generationId: string; snapshotId: string } | undefined;
+// Covers bounded detector and translation-model setup plus detection and translation.
+const LOCAL_TRANSLATION_LEASE_MS = 270_000;
+let pending:
+  | {
+      controller: AbortController;
+      generationId: string;
+      snapshotId: string;
+      local?: {
+        targetLanguage: string;
+        owner: chrome.runtime.Port;
+        timeout: ReturnType<typeof setTimeout>;
+      };
+    }
+  | undefined;
+function clearPending(): void {
+  if (pending?.local) clearTimeout(pending.local.timeout);
+  pending = undefined;
+}
 let mutation: Promise<unknown> = Promise.resolve();
 const readingClients = new Set<chrome.runtime.Port>();
 let readingFrames: { tabId: number; documents: string[] } | undefined;
@@ -49,7 +68,7 @@ async function readState(): Promise<ActiveDraftState | undefined> {
   if (Object.hasOwn(stored, ACTIVE_DRAFT_STORAGE_KEY)) {
     // Old or corrupt state can still contain private text and may have no expiry.
     pending?.controller.abort();
-    pending = undefined;
+    clearPending();
     await chrome.storage.session.remove(ACTIVE_DRAFT_STORAGE_KEY);
     await chrome.alarms.clear(EXPIRY_ALARM);
   }
@@ -70,7 +89,7 @@ async function sendToEditor(
 }
 async function clearState(): Promise<void> {
   pending?.controller.abort();
-  pending = undefined;
+  clearPending();
   const state = await readState();
   await chrome.storage.session.remove(ACTIVE_DRAFT_STORAGE_KEY);
   await chrome.alarms.clear(EXPIRY_ALARM);
@@ -208,11 +227,8 @@ async function runRewrite(
         "Capture a draft before generating, or cancel the current rewrite.",
       );
     }
-    if ((state.source === "selection") !== (message.settings.operation === "translate")) {
-      return failure(
-        "INVALID_REQUEST",
-        "Use Translate for selected text and writing modes for an editor.",
-      );
+    if (state.source === "selection" || message.settings.operation === "translate") {
+      return failure("INVALID_REQUEST", "Reading translation runs locally in the panel.");
     }
     const consent = await chrome.storage.local.get(PRIVACY_CONSENT_KEY);
     if (consent[PRIVACY_CONSENT_KEY] !== consentScope(__SMARTASSISTANCE_API_BASE_URL__)) {
@@ -222,13 +238,6 @@ async function runRewrite(
       );
     }
     const controller = new AbortController();
-    if (state.source === "selection" && readingClients.size === 0)
-      return failure("CANCELLED", "Open the panel before translating selected text.");
-    if (state.source === "selection") {
-      const [active] = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (active?.id !== state.tabId)
-        return failure("CANCELLED", "Return to the selected page to translate.");
-    }
     pending = { controller, generationId: message.generationId, snapshotId: message.snapshotId };
     const { autoTranslate: _autoTranslate, ...capturedState } = state;
     await setState({ ...capturedState, phase: "generating", generationId: message.generationId });
@@ -243,11 +252,6 @@ async function runRewrite(
   let outcome: ExtensionResponse;
   try {
     const stored = await chrome.storage.session.get(AUTH_TOKEN_STORAGE_KEY);
-    if (state.source === "selection" && readingClients.size === 0) controller.abort();
-    if (state.source === "selection") {
-      const [active] = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (active?.id !== state.tabId) controller.abort();
-    }
     controller.signal.throwIfAborted();
     const token = stored[AUTH_TOKEN_STORAGE_KEY];
     const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -291,12 +295,12 @@ async function runRewrite(
         const { generationId: _generation, ...rest } = current;
         await setState({ ...rest, phase: "captured" });
       }
-      if (pending?.controller === controller) pending = undefined;
+      if (pending?.controller === controller) clearPending();
       return !outcome.ok
         ? outcome
         : failure("CANCELLED", "This rewrite no longer belongs to the active draft.");
     }
-    pending = undefined;
+    clearPending();
     if (outcome.ok) await setState({ ...current, phase: "preview" });
     else {
       const { generationId: _generation, ...rest } = current;
@@ -305,10 +309,102 @@ async function runRewrite(
     return outcome;
   });
 }
+function readerFor(sender: chrome.runtime.MessageSender): chrome.runtime.Port | undefined {
+  return [...readingClients].find((port) => port.sender?.documentId === sender.documentId);
+}
+async function cancelLocalAttempt(): Promise<void> {
+  if (!pending?.local) return;
+  const attempt = pending;
+  attempt.controller.abort();
+  clearPending();
+  const state = await readyState();
+  if (matches(state, attempt) && state.phase === "generating") {
+    const { generationId: _generation, ...rest } = state;
+    await setState({ ...rest, phase: "captured" });
+  }
+}
+async function localTranslation(
+  message: Extract<
+    ExtensionRequest,
+    { type: "BEGIN_LOCAL_TRANSLATION" | "COMPLETE_LOCAL_TRANSLATION" }
+  >,
+  sender: chrome.runtime.MessageSender,
+): Promise<ExtensionResponse> {
+  const state = await readyState();
+  const beginning = message.type === "BEGIN_LOCAL_TRANSLATION";
+  if (
+    state?.source !== "selection" ||
+    state.draft.snapshotId !== message.snapshotId ||
+    (beginning
+      ? !["captured", "preview"].includes(state.phase)
+      : !matches(state, message) || state.phase !== "generating")
+  )
+    return failure("CONFLICT", "This local translation no longer belongs to the selected passage.");
+  const consent = await chrome.storage.local.get(LOCAL_READING_CONSENT_KEY);
+  if (consent[LOCAL_READING_CONSENT_KEY] !== LOCAL_READING_NOTICE_VERSION)
+    return failure(
+      "AUTHENTICATION_REQUIRED",
+      "Read and accept the local translation notice first.",
+    );
+  const owner = readerFor(sender);
+  if (!owner) return failure("CANCELLED", "Open the panel before translating selected text.");
+  const [active] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (active?.id !== state.tabId) {
+    await cancelLocalAttempt();
+    return failure("CANCELLED", "Return to the selected page to translate.");
+  }
+  if (!readingClients.has(owner) || state.draft.expiresAt <= Date.now()) {
+    await cancelLocalAttempt();
+    await readyState();
+    return failure("CANCELLED", "This reading session is no longer active.");
+  }
+  if (!beginning) {
+    if (
+      !pending?.local ||
+      pending.local.owner !== owner ||
+      pending.local.targetLanguage !== message.targetLanguage ||
+      pending.snapshotId !== message.snapshotId ||
+      pending.generationId !== message.generationId ||
+      pending.controller.signal.aborted
+    )
+      return failure("CONFLICT", "This local translation attempt is no longer current.");
+    await setState({ ...state, phase: "preview" });
+    clearPending();
+    return { ok: true, localCompleted: true };
+  }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => {
+    void locked(async () => {
+      if (pending?.controller === controller) await cancelLocalAttempt();
+    });
+  }, LOCAL_TRANSLATION_LEASE_MS);
+  pending = {
+    controller,
+    generationId: message.generationId,
+    snapshotId: message.snapshotId,
+    local: { targetLanguage: message.targetLanguage, owner, timeout },
+  };
+  const { autoTranslate: _autoTranslate, ...rest } = state;
+  try {
+    await setState({ ...rest, phase: "generating", generationId: message.generationId });
+  } catch (error) {
+    controller.abort();
+    clearPending();
+    throw error;
+  }
+  return { ok: true, localStarted: true };
+}
 async function handleMutation(
   message: Exclude<ExtensionRequest, { type: "RUN_REWRITE" }>,
+  sender: chrome.runtime.MessageSender,
 ): Promise<ExtensionResponse> {
   switch (message.type) {
+    case "BEGIN_LOCAL_TRANSLATION":
+    case "COMPLETE_LOCAL_TRANSLATION":
+      return localTranslation(message, sender);
+    case "ACCEPT_LOCAL_READING_NOTICE":
+      await chrome.storage.local.set({ [LOCAL_READING_CONSENT_KEY]: LOCAL_READING_NOTICE_VERSION });
+      return { ok: true, consented: true };
     case "READ_SELECTION":
       return readSelection();
     case "ACCEPT_PRIVACY_NOTICE":
@@ -317,7 +413,7 @@ async function handleMutation(
       });
       return { ok: true, consented: true };
     case "CLEAR_PRIVATE_DATA":
-      await chrome.storage.local.remove(PRIVACY_CONSENT_KEY);
+      await chrome.storage.local.remove([PRIVACY_CONSENT_KEY, LOCAL_READING_CONSENT_KEY]);
       await clearState();
       return { ok: true, cleared: true };
     case "CAPTURE_ACTIVE_EDITOR":
@@ -339,8 +435,14 @@ async function handleMutation(
       const state = await readyState();
       if (!matches(state, message) || state.phase !== "generating")
         return failure("CONFLICT", "This rewrite is no longer running.");
+      if (
+        pending?.local &&
+        (sender.url !== chrome.runtime.getURL("sidepanel.html") ||
+          readerFor(sender) !== pending.local.owner)
+      )
+        return failure("CONFLICT", "Only the owning panel can cancel this local translation.");
       pending?.controller.abort();
-      pending = undefined;
+      clearPending();
       const { generationId: _generation, ...rest } = state;
       await setState({ ...rest, phase: "captured" });
       return { ok: true, cancelled: true };
@@ -432,6 +534,18 @@ chrome.tabs.onUpdated.addListener((tabId, change) => {
   if (change.status === "loading" || change.url !== undefined)
     void locked(() => invalidateTab(tabId));
 });
+chrome.tabs.onActivated.addListener(({ tabId }) => {
+  void locked(async () => {
+    const state = await readyState();
+    if (readingFrames && readingFrames.tabId !== tabId) {
+      readingFrames = undefined;
+      readSelectionIds.clear();
+    }
+    if (state?.source === "selection" && state.tabId !== tabId) {
+      await clearState();
+    }
+  });
+});
 chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
   if (sender.id !== chrome.runtime.id || !sender.url?.startsWith(chrome.runtime.getURL(""))) {
     sendResponse(failure("AUTHENTICATION_REQUIRED", "Untrusted extension message."));
@@ -441,8 +555,23 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) =>
     sendResponse(failure("INVALID_REQUEST", "Invalid extension message."));
     return false;
   }
+  if (
+    [
+      "BEGIN_LOCAL_TRANSLATION",
+      "COMPLETE_LOCAL_TRANSLATION",
+      "ACCEPT_LOCAL_READING_NOTICE",
+    ].includes(message.type) &&
+    sender.url !== chrome.runtime.getURL("sidepanel.html")
+  ) {
+    sendResponse(
+      failure("AUTHENTICATION_REQUIRED", "Local translation requires the reading panel."),
+    );
+    return false;
+  }
   const response =
-    message.type === "RUN_REWRITE" ? runRewrite(message) : locked(() => handleMutation(message));
+    message.type === "RUN_REWRITE"
+      ? runRewrite(message)
+      : locked(() => handleMutation(message, sender));
   void response
     .then(sendResponse)
     .catch(() => sendResponse(failure("PROVIDER_ERROR", "The extension request failed.")));
@@ -461,17 +590,10 @@ chrome.runtime.onConnect.addListener((port) => {
   port.onDisconnect.addListener(() => {
     readingClients.delete(port);
     if (readingClients.size === 0) readSelectionIds.clear();
-    if (readingClients.size === 0)
-      void locked(async () => {
-        if (readingClients.size > 0) return;
-        const state = await readyState();
-        if (state?.source === "selection" && state.phase === "generating") {
-          pending?.controller.abort();
-          pending = undefined;
-          const { generationId: _generation, ...rest } = state;
-          await setState({ ...rest, phase: "captured" });
-        }
-      });
+    void locked(async () => {
+      if (pending?.local?.owner !== port) return;
+      await cancelLocalAttempt();
+    });
   });
   port.postMessage(READING_READY_MESSAGE);
 });
@@ -479,9 +601,8 @@ chrome.runtime.onConnect.addListener((port) => {
 async function readSelection(): Promise<ExtensionResponse> {
   const unchanged: ExtensionResponse = { ok: true, unchanged: true };
   if (readingClients.size === 0) return unchanged;
-  const consent = await chrome.storage.local.get(PRIVACY_CONSENT_KEY);
-  if (consent[PRIVACY_CONSENT_KEY] !== consentScope(__SMARTASSISTANCE_API_BASE_URL__))
-    return unchanged;
+  const consent = await chrome.storage.local.get(LOCAL_READING_CONSENT_KEY);
+  if (consent[LOCAL_READING_CONSENT_KEY] !== LOCAL_READING_NOTICE_VERSION) return unchanged;
   const current = await readyState();
   if (current && current.source !== "selection") return unchanged;
   const target =

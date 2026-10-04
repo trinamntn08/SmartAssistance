@@ -16,7 +16,8 @@ interface Harness {
   capture(selector: string): Promise<ExtensionResponse>;
   send(request: ExtensionRequest): Promise<ExtensionResponse>;
   state(): Promise<ReadyDraftState | undefined>;
-  reply(text: string): void;
+  reply(text: string): Promise<void>;
+  localCalls(): Promise<number>;
   hold: boolean;
   output: string;
   calls: number;
@@ -60,7 +61,13 @@ const test = base.extend<{ app: Harness }>({
     manifest.host_permissions = [`${url}/*`];
     await writeFile(join(extensionPath, "manifest.json"), JSON.stringify(manifest));
     for (const name of ["service-worker.js", "sidepanel.js"]) {
-      const source = await readFile(join(extensionPath, name), "utf8");
+      let source = await readFile(join(extensionPath, name), "utf8");
+      if (name === "service-worker.js") {
+        source = source.replaceAll(
+          "chrome.tabs.onActivated.addListener(",
+          '((listener) => chrome.tabs.onActivated.addListener(async (info) => { const tab = await chrome.tabs.get(info.tabId); if (tab.url !== chrome.runtime.getURL("sidepanel.html")) listener(info); }))(',
+        );
+      }
       if (!source.includes("http://127.0.0.1:8787"))
         throw new Error("Browser tests require the default local extension build.");
       await writeFile(join(extensionPath, name), source.replaceAll("http://127.0.0.1:8787", url));
@@ -69,6 +76,63 @@ const test = base.extend<{ app: Harness }>({
       channel: "chromium",
       headless: true,
       args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`],
+    });
+    await context.exposeBinding("localTranslationConfig", () => ({
+      output: app.output,
+      hold: app.hold,
+    }));
+    await context.addInitScript(() => {
+      const state = {
+        calls: [] as { text: string; sourceLanguage: string; targetLanguage: string }[],
+        held: [] as ((text: string) => void)[],
+        availability: "available",
+        sourceLanguage: "fr",
+        confidence: 0.99,
+        fail: false,
+        creates: 0,
+        destroys: 0,
+      };
+      Reflect.set(window, "testLocalTranslation", state);
+      Object.defineProperty(window, "LanguageDetector", {
+        configurable: true,
+        value: {
+          availability: async () => "available",
+          create: async () => ({
+            detect: async () => [
+              { detectedLanguage: state.sourceLanguage, confidence: state.confidence },
+              { detectedLanguage: "en", confidence: 1 - state.confidence },
+              { detectedLanguage: "und", confidence: 0 },
+            ],
+            destroy: () => {
+              state.destroys += 1;
+            },
+          }),
+        },
+      });
+      Object.defineProperty(window, "Translator", {
+        configurable: true,
+        value: {
+          availability: async () => state.availability,
+          create: async (pair: { sourceLanguage: string; targetLanguage: string }) => {
+            state.creates += 1;
+            state.availability = "available";
+            return {
+              translate: async (text: string) => {
+                state.calls.push({ text, ...pair });
+                if (state.fail) throw new Error("Synthetic local failure");
+                const config = await Reflect.get(window, "localTranslationConfig")();
+                // Intentionally ignore aborts to exercise stale-result protection.
+                return config.hold
+                  ? new Promise<string>((resolve) => state.held.push(resolve))
+                  : config.output;
+              },
+              destroy: () => {
+                state.destroys += 1;
+              },
+            };
+          },
+        },
+      });
     });
     try {
       const worker = context.serviceWorkers()[0] ?? (await context.waitForEvent("serviceworker"));
@@ -98,6 +162,8 @@ const test = base.extend<{ app: Harness }>({
         hold: false,
         output: "Rewritten A\nSecond paragraph",
         calls: 0,
+        localCalls: () =>
+          panel.evaluate(() => Reflect.get(window, "testLocalTranslation").calls.length),
         send: (request) => panel.evaluate((value) => chrome.runtime.sendMessage(value), request),
         state: () =>
           worker.evaluate(
@@ -111,7 +177,11 @@ const test = base.extend<{ app: Harness }>({
           await editor.locator(selector).focus();
           return app.send({ type: "CAPTURE_ACTIVE_EDITOR" });
         },
-        reply(text) {
+        async reply(text) {
+          await panel.evaluate((value) => {
+            const state = Reflect.get(window, "testLocalTranslation");
+            for (const resolve of state.held.splice(0)) resolve(value);
+          }, text);
           if (held && !held.destroyed) {
             held.setHeader("Content-Type", "application/json");
             held.end(
@@ -134,9 +204,10 @@ const test = base.extend<{ app: Harness }>({
   },
 });
 async function accept(app: Harness): Promise<void> {
-  await app.panel
-    .getByRole("button", { name: "I agree to send text for translation or writing" })
-    .click();
+  await expect(
+    app.panel.locator("#accept-local-reading:visible, #accept-privacy:visible"),
+  ).toHaveCount(1);
+  await app.panel.locator("#accept-local-reading:visible, #accept-privacy:visible").click();
 }
 test("selected text shows original and translation without Copy and remembers language", async ({
   app,
@@ -169,9 +240,8 @@ test("selected text shows original and translation without Copy and remembers la
   await expect(app.panel.locator("#replace")).toBeHidden();
   await app.panel.screenshot({ path: testInfo.outputPath("translation-panel.png") });
   await expect(app.editor.locator("#article")).toHaveText("Bonjour Marie, rendez-vous le 12 mai.");
-  app.output = "Bonjour Marie.";
   await app.panel.locator("#language").selectOption("fr");
-  await expect(app.panel.locator("#preview")).toHaveValue(app.output);
+  await expect(app.panel.locator("#preview")).toHaveValue("Bonjour Marie, rendez-vous le 12 mai.");
   await app.panel.reload();
   await expect(app.panel.locator("#language")).toHaveValue("fr");
   await expect(app.panel.locator("#original-section")).toBeVisible();
@@ -232,7 +302,7 @@ test("translation fills the sidebar and adapts to window height without page scr
   await expect(app.panel.locator("#original")).toBeHidden();
 });
 
-for (const target of ["vi", "fr"]) {
+for (const target of ["vi", "en"]) {
   test(`first panel reveal automatically translates using ${target}`, async ({ app }) => {
     await app.panel.evaluate(async (saved) => {
       if (saved !== "vi") await chrome.storage.local.set({ translationLanguage: saved });
@@ -249,7 +319,7 @@ for (const target of ["vi", "fr"]) {
       });
     });
     await app.panel.reload();
-    await app.send({ type: "ACCEPT_PRIVACY_NOTICE" });
+    await app.send({ type: "ACCEPT_LOCAL_READING_NOTICE" });
     await app.editor.bringToFront();
     await app.editor.locator("#article").evaluate((element) => {
       const range = document.createRange();
@@ -266,12 +336,14 @@ for (const target of ["vi", "fr"]) {
     // Revealing a real sidebar leaves the selected webpage as the active tab.
     await app.panel.evaluate(() => Reflect.get(window, "showTestPanel")());
     await expect(app.panel.locator("#preview")).toHaveValue(app.output);
-    expect(app.calls).toBe(1);
+    expect(await app.localCalls()).toBe(1);
+    expect(app.calls).toBe(0);
     await app.panel.evaluate(() => Reflect.get(window, "showTestPanel")());
     await app.panel.reload();
     await app.panel.evaluate(() => Reflect.get(window, "showTestPanel")());
     await expect(app.panel.locator("#language")).toHaveValue(target);
-    expect(app.calls).toBe(1);
+    expect(await app.localCalls()).toBe(0);
+    expect(app.calls).toBe(0);
   });
 }
 
@@ -456,15 +528,18 @@ test("context-menu translation starts after first consent and later runs immedia
   await accept(app);
   await expect(app.panel.locator("#preview")).toHaveValue(app.output);
   await expect(app.panel.locator("#language")).toHaveValue("vi");
-  expect(app.calls).toBe(1);
+  expect(await app.localCalls()).toBe(1);
+  expect(app.calls).toBe(0);
   app.output = "Bản dịch tiếp theo.";
   await selectArticle();
   await app.send({ type: "CAPTURE_ACTIVE_SELECTION" });
   await expect(app.panel.locator("#preview")).toHaveValue(app.output);
-  expect(app.calls).toBe(2);
+  expect(await app.localCalls()).toBe(2);
+  expect(app.calls).toBe(0);
   await app.panel.reload();
   await expect(app.panel.locator("#generate")).toBeHidden();
-  expect(app.calls).toBe(2);
+  expect(await app.localCalls()).toBe(0);
+  expect(app.calls).toBe(0);
   await expect(app.panel.locator("#copy")).toBeHidden();
 });
 test("active reading translates new selections and stops when the panel is hidden or closed", async ({
@@ -495,24 +570,193 @@ test("active reading translates new selections and stops when the panel is hidde
   app.output = "New reading translation";
   await selectText("Synthetic next passage");
   await expect(app.panel.locator("#preview")).toHaveValue(app.output);
-  expect(app.calls).toBe(2);
+  expect(await app.localCalls()).toBe(2);
+  expect(app.calls).toBe(0);
   // Explicit polling proves duplicate selections do not request another model call.
   expect(await app.send({ type: "READ_SELECTION" })).toEqual({ ok: true, unchanged: true });
-  expect(app.calls).toBe(2);
+  expect(await app.localCalls()).toBe(2);
+  expect(app.calls).toBe(0);
   await app.panel.evaluate(() => {
     Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "hidden" });
     document.dispatchEvent(new Event("visibilitychange"));
   });
   await selectText("Synthetic hidden-panel passage");
   expect(await app.send({ type: "READ_SELECTION" })).toEqual({ ok: true, unchanged: true });
-  expect(app.calls).toBe(2);
+  expect(await app.localCalls()).toBe(2);
+  expect(app.calls).toBe(0);
+  const callsBeforeClose = await app.localCalls();
   await app.panel.close();
   await selectText("Synthetic closed-panel passage");
   // Wait beyond two polling intervals to catch unintended background requests.
   await app.editor.waitForTimeout(1500);
   expect(await app.state()).toMatchObject({ draft: { text: "Synthetic next passage" } });
-  expect(app.calls).toBe(2);
+  expect(callsBeforeClose).toBe(2);
+  expect(app.calls).toBe(0);
 });
+async function captureArticle(app: Harness, text?: string): Promise<void> {
+  await app.editor.bringToFront();
+  await app.editor.locator("#article").evaluate((element, value) => {
+    if (value !== undefined) element.textContent = value;
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    window.getSelection()?.removeAllRanges();
+    window.getSelection()?.addRange(range);
+  }, text);
+  await app.send({ type: "CAPTURE_ACTIVE_SELECTION" });
+}
+
+test("local reading requires its own notice and never grants cloud writing consent", async ({
+  app,
+}) => {
+  await captureArticle(app);
+  const state = await app.state();
+  expect(
+    await app.send({
+      type: "BEGIN_LOCAL_TRANSLATION",
+      snapshotId: state?.draft.snapshotId ?? "",
+      generationId: "without-local-consent",
+      targetLanguage: "vi",
+    }),
+  ).toMatchObject({ ok: false, code: "AUTHENTICATION_REQUIRED" });
+  expect(await app.localCalls()).toBe(0);
+  await accept(app);
+  await expect(app.panel.locator("#preview")).toHaveValue(app.output);
+  expect(
+    await app.panel.evaluate(async () => {
+      const stored = await chrome.storage.local.get(["localReadingConsent", "privacyConsent"]);
+      return stored;
+    }),
+  ).toEqual({ localReadingConsent: "2026-10-04.1" });
+  expect(
+    await app.panel.evaluate(() => Reflect.get(window, "testLocalTranslation").calls),
+  ).toMatchObject([
+    { text: "Bonjour Marie, rendez-vous le 12 mai.", sourceLanguage: "fr", targetLanguage: "vi" },
+  ]);
+  expect(JSON.stringify(await app.state())).not.toContain(app.output);
+  expect(app.calls).toBe(0);
+  await app.capture("#draft");
+  await expect(app.panel.locator("#accept-privacy")).toBeVisible();
+  await expect(app.panel.locator("#generate")).toBeDisabled();
+});
+
+test("missing browser translation API reports unavailability without cloud fallback", async ({
+  app,
+}) => {
+  await app.panel.addInitScript(() => {
+    Object.defineProperty(window, "Translator", { configurable: true, value: undefined });
+  });
+  await app.panel.reload();
+  await captureArticle(app);
+  await accept(app);
+  await expect(app.panel.locator("#status")).toContainText("Local translation is unavailable");
+  await expect(app.panel.locator("#result")).toBeHidden();
+  expect(await app.localCalls()).toBe(0);
+  expect(app.calls).toBe(0);
+});
+
+for (const failure of ["unsupported", "uncertain", "failed"] as const) {
+  test(`local ${failure} stays offline and can retry after recovery`, async ({ app }) => {
+    await app.panel.evaluate((kind) => {
+      const local = Reflect.get(window, "testLocalTranslation");
+      if (kind === "unsupported") local.availability = "unavailable";
+      if (kind === "uncertain") local.confidence = 0.55;
+      if (kind === "failed") local.fail = true;
+    }, failure);
+    await captureArticle(app);
+    await accept(app);
+    const expected =
+      failure === "unsupported"
+        ? "cannot translate this language pair"
+        : failure === "uncertain"
+          ? "confidently identify"
+          : "Local translation failed";
+    await expect(app.panel.locator("#status")).toContainText(expected);
+    await expect(app.panel.locator("#result")).toBeHidden();
+    await expect(app.panel.locator("#local-translation-action")).toHaveText(
+      "Retry local translation",
+    );
+    expect(app.calls).toBe(0);
+    await app.panel.evaluate(() => {
+      const local = Reflect.get(window, "testLocalTranslation");
+      local.availability = "available";
+      local.confidence = 0.99;
+      local.fail = false;
+    });
+    await app.panel.locator("#local-translation-action").click();
+    await expect(app.panel.locator("#preview")).toHaveValue(app.output);
+    expect(app.calls).toBe(0);
+  });
+}
+
+test("automatic reading requests an explicit click for language model setup", async ({ app }) => {
+  await app.send({ type: "ACCEPT_LOCAL_READING_NOTICE" });
+  await app.panel.evaluate(() => {
+    Reflect.get(window, "testLocalTranslation").availability = "downloadable";
+    Object.defineProperty(navigator, "userActivation", {
+      configurable: true,
+      value: { isActive: false },
+    });
+  });
+  await captureArticle(app);
+  await expect(app.panel.locator("#local-translation-action")).toHaveText(
+    "Enable local translation",
+  );
+  expect(await app.localCalls()).toBe(0);
+  expect(await app.panel.evaluate(() => Reflect.get(window, "testLocalTranslation").creates)).toBe(
+    0,
+  );
+  await app.panel.evaluate(() => {
+    Object.defineProperty(navigator, "userActivation", {
+      configurable: true,
+      value: { isActive: true },
+    });
+  });
+  await app.panel.locator("#local-translation-action").click();
+  await expect(app.panel.locator("#preview")).toHaveValue(app.output);
+  expect(await app.localCalls()).toBe(1);
+  expect(app.calls).toBe(0);
+});
+
+test("language changes discard held local output even when the browser ignores abort", async ({
+  app,
+}) => {
+  app.hold = true;
+  await captureArticle(app);
+  await accept(app);
+  await expect.poll(() => app.localCalls()).toBe(1);
+  await expect
+    .poll(() => app.panel.evaluate(() => Reflect.get(window, "testLocalTranslation").held.length))
+    .toBe(1);
+  app.hold = false;
+  app.output = "Fresh English translation";
+  await app.panel.locator("#language").selectOption("en");
+  await expect(app.panel.locator("#preview")).toHaveValue(app.output);
+  await app.reply("Obsolete Vietnamese translation");
+  await expect(app.panel.locator("#preview")).toHaveValue(app.output);
+  expect(await app.localCalls()).toBe(2);
+  expect(app.calls).toBe(0);
+});
+
+test("clearing private data cancels local reading and removes both consents", async ({ app }) => {
+  app.hold = true;
+  await captureArticle(app);
+  await accept(app);
+  await expect
+    .poll(() => app.panel.evaluate(() => Reflect.get(window, "testLocalTranslation").held.length))
+    .toBe(1);
+  await app.panel.locator("#clear-private-data").click();
+  await expect.poll(() => app.state()).toBeUndefined();
+  await app.reply("Cancelled local result");
+  await expect(app.panel.locator("#result")).toBeHidden();
+  await expect(app.panel.locator("#original")).toHaveValue("");
+  expect(
+    await app.panel.evaluate(async () =>
+      chrome.storage.local.get(["localReadingConsent", "privacyConsent"]),
+    ),
+  ).toEqual({});
+  expect(app.calls).toBe(0);
+});
+
 for (const [selector, output] of [
   ["#draft", "Rewritten A\nSecond paragraph"],
   ["#email", "after@example.com"],
@@ -686,7 +930,7 @@ test("late rewrite cannot be attached to a recaptured draft", async ({ app }) =>
   const old = await app.state();
   await app.editor.locator("#draft").fill("New draft B");
   await app.capture("#draft");
-  app.reply("Old rewrite A");
+  await app.reply("Old rewrite A");
   await expect(app.panel.locator("#original")).toHaveValue("New draft B");
   await expect(app.panel.locator("#result")).toBeHidden();
   expect(
@@ -706,7 +950,7 @@ test("changed editor refuses replacement and keeps a copyable preview", async ({
   await app.panel.locator("#generate").click();
   await expect.poll(() => app.calls).toBe(1);
   await app.editor.locator("#draft").fill("User kept typing");
-  app.reply("Generated rewrite");
+  await app.reply("Generated rewrite");
   await expect(app.panel.locator("#preview")).toHaveValue("Generated rewrite");
   await app.panel.locator("#replace").click();
   await expect(app.panel.locator("#status")).toContainText("not overwritten");
@@ -731,7 +975,7 @@ test("consent cannot be bypassed, cancellation and clearing discard state", asyn
   await expect.poll(() => app.calls).toBe(1);
   await app.panel.locator("#cancel").click();
   await expect.poll(async () => (await app.state())?.phase).toBe("captured");
-  app.reply("Cancelled output");
+  await app.reply("Cancelled output");
   await expect(app.panel.locator("#result")).toBeHidden();
   await app.panel.locator("#clear-private-data").click();
   await expect.poll(() => app.state()).toBeUndefined();

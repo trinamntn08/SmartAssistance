@@ -87,7 +87,9 @@ function detectedLanguage(value: unknown): string {
   for (const result of value) {
     if (!result || typeof result !== "object")
       throw new LocalTranslationError("UNCERTAIN_LANGUAGE");
-    const tag = language(result.detectedLanguage);
+    // Chrome includes und as the probability mass for unidentified languages.
+    // Keep it in confidence comparisons, but never choose it as a source.
+    const tag = result.detectedLanguage === "und" ? "und" : language(result.detectedLanguage);
     const confidence = result.confidence;
     if (
       !tag ||
@@ -104,6 +106,7 @@ function detectedLanguage(value: unknown): string {
   const best = results[0];
   if (
     !best ||
+    best.language === "und" ||
     best.confidence < 0.8 ||
     best.confidence + Number.EPSILON < (results[1]?.confidence ?? 0) + 0.2
   ) {

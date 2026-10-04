@@ -55,6 +55,10 @@ implemented capabilities, verification evidence, and outstanding work.
   language, and a panel displaying Original and Translation without Copy/Replace.
   Original text starts collapsed and can be expanded with one click. New captures
   collapse it again; compact 14px text prioritizes visible translation content.
+- Reading translation uses Chrome's local Translator and LanguageDetector APIs
+  after a separate local acknowledgement and any required model setup. It needs
+  no backend or API key and has no automatic cloud fallback. Unavailable devices,
+  unsupported pairs, and uncertain detection show clear setup/retry guidance.
 - Pronunciation: one sound icon beside each text area reads its selected text,
   or the full passage if nothing is selected. The same icon stops playback.
   Chrome detects the original language locally; translation uses the target
@@ -107,9 +111,10 @@ implemented capabilities, verification evidence, and outstanding work.
     translation fills the free space while Original is collapsed.
     It does not offer Copy/Replace. The translation language is remembered;
     Vietnamese is the default. The selection context-menu action translates
-    immediately after consent. Toolbar invocation with a selection also translates
+    locally after local acknowledgement and any required model setup. Toolbar invocation with a selection also translates
     immediately, and changing the language requests a new translation without a
-    Translate button. Translation never changes the webpage.
+    Translate button. Translation never changes the webpage or makes a cloud request.
+    Missing local models offer setup; errors never fall back to a paid provider.
     If capture arrives before the panel is visible or connected, initial translation
     starts automatically once the visible reading connection is ready, consent and
     preferences are loaded, and the capture is valid. No language change is required.
@@ -141,9 +146,9 @@ implemented capabilities, verification evidence, and outstanding work.
   Windows, macOS, and Linux development support.
 - Data residency, retention, and deletion: Do not persist draft or rewritten text
   in the SmartAssistance database, cache, analytics, or application logs. Send
-  only the captured writing field or explicit reading selection to the configured
-  model provider. Document provider
-  retention separately and request `store: false` where supported.
+  only the captured writing field to the configured provider for writing. Reading
+  selections stay with Chrome's local models. Document provider retention
+  separately and request `store: false` where supported.
 - Authentication and authorization: Production users authenticate with a
   SmartAssistance account through a browser OAuth flow. The extension receives a
   short-lived application token. It never reads ChatGPT cookies or holds an
@@ -165,10 +170,10 @@ implemented capabilities, verification evidence, and outstanding work.
   markup, or executable instructions.
 - Actions or tools the model may invoke: None.
 - Actions that require human confirmation: Replacing editor content. Sending the
-  text is also preceded by first-use disclosure and consent. Reading translation
-  is sent when the user opens selected text, invokes the explicit Translate
-  context-menu action, or changes translation language after consent, and never
-  modifies the page.
+  writing text is preceded by cloud disclosure and consent. Reading translation
+  runs locally when the user opens selected text, invokes Translate, or changes
+  translation language after local acknowledgement/setup, and never modifies the
+  page. Chrome downloads model packs only through explicit setup when needed.
 - Failure and fallback behavior: Preserve the original editor, show a concise
   retryable error, and allow copying any successfully generated preview.
 - Quality evaluation set and acceptance threshold: Versioned examples covering

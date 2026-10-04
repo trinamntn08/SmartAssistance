@@ -10,6 +10,7 @@ function setup() {
     detect: vi.fn(async () => [
       { detectedLanguage: "en", confidence: 0.95 },
       { detectedLanguage: "fr", confidence: 0.05 },
+      { detectedLanguage: "und", confidence: 0 },
     ]),
     destroy: vi.fn(),
   };
@@ -67,6 +68,43 @@ describe("local translation adapter", () => {
     expect(await adapter.translate("Hello\nworld", "en", controller.signal)).toEqual({
       text: "Hello\nworld",
       sourceLanguage: "en",
+    });
+    expect(platform.translator.availability).not.toHaveBeenCalled();
+  });
+  it("accepts Chrome's appended und candidate when a known language is confident", async () => {
+    const { adapter, detector, platform, controller } = setup();
+    detector.detect.mockResolvedValue([
+      { detectedLanguage: "en", confidence: 0.99 },
+      { detectedLanguage: "und", confidence: 0.01 },
+    ]);
+    expect((await adapter.translate("Hello", "vi", controller.signal)).sourceLanguage).toBe("en");
+    expect(platform.translator.availability).toHaveBeenCalledWith({
+      sourceLanguage: "en",
+      targetLanguage: "vi",
+    });
+  });
+  it("rejects an und winner without requesting a translation model", async () => {
+    const { adapter, detector, platform, controller } = setup();
+    detector.detect.mockResolvedValue([
+      { detectedLanguage: "en", confidence: 0.01 },
+      { detectedLanguage: "und", confidence: 0.99 },
+    ]);
+    await expect(
+      adapter.translate("Unknown passage", "vi", controller.signal),
+    ).rejects.toMatchObject({ code: "UNCERTAIN_LANGUAGE" });
+    expect(platform.translator.availability).not.toHaveBeenCalled();
+  });
+  it("keeps und in ambiguity checks and rejects und as a target", async () => {
+    const { adapter, detector, platform, controller } = setup();
+    detector.detect.mockResolvedValue([
+      { detectedLanguage: "en", confidence: 0.8 },
+      { detectedLanguage: "und", confidence: 0.7 },
+    ]);
+    await expect(adapter.translate("Hello", "vi", controller.signal)).rejects.toMatchObject({
+      code: "UNCERTAIN_LANGUAGE",
+    });
+    await expect(adapter.translate("Hello", "und", controller.signal)).rejects.toMatchObject({
+      code: "INVALID_OUTPUT",
     });
     expect(platform.translator.availability).not.toHaveBeenCalled();
   });

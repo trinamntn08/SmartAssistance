@@ -6,14 +6,17 @@ and helps people understand, pronounce, and write another language by translatin
 selected page text and playing pronunciation on request.
 
 To translate while reading, select visible text, right-click, and choose
-**Translate with SmartAssistance**. Translation starts immediately after first-use
-consent, using Vietnamese by default or your saved language. Clicking the
+**Translate with SmartAssistance**. Reading translation runs locally in Chrome,
+using Vietnamese by default or your saved language after enabling local reading.
+Chrome 138+ and available device models are required; first use may show
+**Enable local translation** to download language packs. Clicking the
 extension icon with selected text also starts translation. Change the language
 in the dropdown to translate again automatically; there is no Translate button.
 The side panel shows the original selection and its translation, each with a
 sound icon. It does not offer Copy/Replace in reading mode. The
 language is remembered locally. Without a selection, the toolbar keeps the
-focused-editor writing workflow. First use requires consent before sending text.
+focused-editor writing workflow. Writing requires separate cloud consent before
+sending text. Reading needs no API key or running backend and has no paid fallback.
 Original text is collapsed by default so the translation gets more space. Click
 **Original** to expand or collapse it; a new passage starts collapsed again.
 Both text areas use compact 14px text and scroll internally. When Original is
@@ -73,6 +76,8 @@ For the complete validation gate, install the test browser once with
 synthetic drafts and a local fake API; they do not call OpenAI.
 
 Read [privacy and retention](docs/privacy.md) before sending real drafts.
+See [local translation verification](docs/local-translation-verification.md) for
+device setup, manual checks, and the remaining quality and performance gates.
 For a limited friends-and-family deployment, see the
 [private beta guide](docs/private-beta.md).
 
